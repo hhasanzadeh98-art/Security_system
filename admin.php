@@ -215,268 +215,7 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>گانت تقویمی شیفت‌ها</title>
     <link rel="stylesheet" href="style.css">
-    <style>
-        .tooltip {
-            position: fixed;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 12px;
-            z-index: 1000;
-            display: none;
-            max-width: 350px;
-            word-wrap: break-word;
-            line-height: 1.6;
-        }
 
-        .tooltip.show {
-            display: block;
-        }
-
-        .shift-block {
-            position: absolute;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 11px;
-            overflow: hidden;
-            white-space: nowrap;
-        }
-
-        .gap-block {
-            background: #9b59b6;
-            z-index: 5;
-        }
-
-        .user-name-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 12px;
-            font-weight: bold;
-            z-index: 10;
-            pointer-events: none;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
-        }
-
-        .multiple-guards {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            height: 100%;
-        }
-
-        .guard-row {
-            position: relative;
-            height: 40px;
-            flex: 1;
-            min-height: 35px;
-        }
-
-        .test-date {
-            background: #e3f2fd;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            text-align: center;
-            font-weight: bold;
-            color: #1976d2;
-        }
-
-        .schedule-panel {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            color: white;
-        }
-
-        .schedule-panel h3 {
-            margin-top: 0;
-            margin-bottom: 15px;
-        }
-
-        .schedule-info {
-            background: rgba(255, 255, 255, 0.2);
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            font-size: 14px;
-        }
-
-        .btn-auto {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 14px;
-            margin: 5px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        }
-
-        .btn-clear {
-            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 14px;
-            margin: 5px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        }
-
-        .success-message {
-            background: #d4edda;
-            color: #155724;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            text-align: center;
-            font-weight: bold;
-            border: 2px solid #28a745;
-        }
-
-        .db-indicator {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-left: 5px;
-        }
-
-        .db-indicator.saved {
-            background: #28a745;
-        }
-
-        .db-indicator.calculated {
-            background: #ffc107;
-        }
-
-        .incomplete-badge {
-            position: absolute;
-            top: -5px;
-            left: 5px;
-            background: #e74c3c;
-            color: white;
-            font-size: 10px;
-            font-weight: bold;
-            padding: 2px 6px;
-            border-radius: 10px;
-            z-index: 20;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-            animation: pulse-red 2s infinite;
-        }
-
-        @keyframes pulse-red {
-
-            0%,
-            100% {
-                box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.6);
-            }
-
-            50% {
-                box-shadow: 0 0 10px 3px rgba(231, 76, 60, 0.3);
-            }
-        }
-
-        .chart-box.incomplete {
-            border: 2px solid #e74c3c;
-            border-radius: 4px;
-        }
-
-        /* ✅ استایل‌های جدید برای نوار ثانویه (اضافه کار) */
-        .secondary-shift-container {
-            position: absolute;
-            bottom: 2px;
-            left: 0;
-            right: 0;
-            height: 16px;
-            background: transparent;
-            z-index: 15;
-        }
-
-        .secondary-shift-block {
-            position: absolute;
-            height: 100%;
-            background: #f39c12;
-            border-radius: 3px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 9px;
-            overflow: hidden;
-            white-space: nowrap;
-            border: 1px solid #e67e22;
-        }
-
-        .secondary-shift-name {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 9px;
-            font-weight: bold;
-            z-index: 16;
-            pointer-events: none;
-            text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
-        }
-
-        .secondary-active {
-            border: 1px solid #ffd700;
-            animation: pulse-gold 2s infinite;
-        }
-
-        @keyframes pulse-gold {
-
-            0%,
-            100% {
-                box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.6);
-            }
-
-            50% {
-                box-shadow: 0 0 8px 2px rgba(255, 215, 0, 0.4);
-            }
-        }
-
-        /* ✅ کوچکتر کردن چارت اصلی */
-        .chart-box {
-            flex: 1;
-            position: relative;
-            min-height: 50px !important;
-            height: auto !important;
-            background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(248, 249, 250, 0.5) 100%);
-            padding: 4px;
-        }
-
-        .day-row {
-            display: flex;
-            border-bottom: 1px solid #e0e0e0;
-            min-height: 60px !important;
-            height: auto !important;
-            background: white;
-            position: relative;
-        }
-    </style>
 </head>
 
 <body>
@@ -489,7 +228,7 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
         <div style="text-align: center; margin-top: 30px;">
             <a href="logout.php" class="logout-link">خروج از سیستم</a>
         </div>
-        <h1 style="text-align: center;">📅 گانت تقویمی شیفت‌ها</h1>
+        <h1 style="text-align: center;">📅شیفت ها</h1>
 
         <?php if ($autoScheduleMessage): ?>
             <div class="success-message"><?php echo $autoScheduleMessage; ?></div>
@@ -497,13 +236,6 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
 
         <div class="schedule-panel">
             <h3>⚙️ مدیریت شیفت‌بندی</h3>
-
-            <div class="schedule-info">
-                <strong>ماه جاری:</strong> <?php echo $monthNames[$month] . ' ' . $year; ?><br>
-                <strong>ماه قبل:</strong> <?php echo $monthNames[$prevMonth] . ' ' . $prevYear; ?><br>
-                <strong>آخرین نگهبان ماه قبل:</strong> <?php echo htmlspecialchars($lastScheduledGuard); ?>
-                (<?php echo !empty($prevDbSchedule) ? 'از دیتابیس' : 'محاسبه شده'; ?>)
-            </div>
 
             <form method="post" style="display: inline-block;">
                 <input type="hidden" name="csrf_token" value="<?php echo CSRF::generateToken(); ?>">
@@ -515,38 +247,6 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                 </button>
             </form>
 
-            <form method="post" style="display: inline-block;">
-                <input type="hidden" name="csrf_token" value="<?php echo CSRF::generateToken(); ?>">
-                <input type="hidden" name="clear_year" value="<?php echo $year; ?>">
-                <input type="hidden" name="clear_month" value="<?php echo $month; ?>">
-
-                <button type="submit" name="clear_schedule" class="btn-clear" onclick="return confirm('⚠️ همه شیفت‌های این ماه حذف شوند؟');">
-                    🗑️ حذف شیفت‌های این ماه
-                </button>
-            </form>
-        </div>
-
-        <div class="shift-info-bar" style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
-            <strong>⏰ ساعت کاری:</strong>
-            از <?php echo htmlspecialchars($activeSetting->getStartTimeFormatted()); ?>
-            تا <?php echo htmlspecialchars($activeSetting->getEndTimeFormatted()); ?> فردا
-            (۲۴ ساعت)
-            <br>
-            <small>
-                ترتیب نگهبانان:
-                <?php
-                $guardNames = [];
-                foreach ($guards as $g) $guardNames[] = htmlspecialchars($g->getName());
-                echo implode(' → ', $guardNames);
-                ?>
-                <br>
-                <span style="color: #666; font-size: 11px;">
-                    <span class="db-indicator saved"></span> = ذخیره شده در دیتابیس |
-                    <span class="db-indicator calculated"></span> = محاسبه شده |
-                    <span style="color: #e74c3c;">🔴</span> = ساعت ناقص |
-                    <span style="color: #f39c12;">🟠</span> = اضافه کار (نفر دوم)
-                </span>
-            </small>
         </div>
 
         <div class="month-picker">
@@ -590,27 +290,13 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                     <?php echo $monthNames[$month]; ?> <?php echo $year; ?>
                     <?php
                     $dbCount = count($dbSchedule);
-                    if ($dbCount > 0) {
-                        echo '<span style="font-size: 14px; color: #d4edda;">( ' . $dbCount . ' روز از دیتابیس )</span>';
-                    }
+                    // if ($dbCount > 0) {
+                    //     echo '<span style="font-size: 14px; color: #d4edda;">( ' . $dbCount . ' روز از دیتابیس )</span>';
+                    // }
                     ?>
                 </h2>
-                <div class="gantt-subtitle">۶ صبح ← ۲۴ ساعت ← ۶ صبح فردا</div>
             </div>
 
-            <div class="time-header">
-                <div class="time-label">روز</div>
-                <div class="time-scale" style="direction: ltr;">
-                    <?php
-                    $hours = [6, 9, 12, 15, 18, 21, 0, 3, 6];
-                    foreach ($hours as $index => $h):
-                        $label = sprintf("%02d:00", $h);
-                        $percent = ($index / (count($hours) - 1)) * 100;
-                    ?>
-                        <div class="hour-marker" style="right: <?php echo $percent; ?>%; left: auto;"><?php echo $label; ?></div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
 
             <?php for ($day = 1; $day <= $daysInMonth; $day++):
                 $gregorian = JalaliDate::jalaliToGregorian($year, $month, $day);
@@ -680,7 +366,7 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                         <?php endif; ?>
 
                         <?php if ($scheduledGuard && !$hasCheckin): ?>
-                            <div class="scheduled-guard" style="right: 0%; width: 100%; height: 100%;">
+                            <div class="scheduled-guard">
                                 <?php echo htmlspecialchars($scheduledGuard->getName()); ?>
                                 <?php echo $isFromDb ? '(ذخیره)' : '(محاسبه)'; ?>
                             </div>
@@ -752,6 +438,7 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                                 }
                             }
 
+                            // ✅ محاسبه early/late نسبت به شروع شیفت استاندارد (6 صبح)
                             $earlyMinutes = 0;
                             $lateMinutes = 0;
                             if ($firstStartMinutes < $shiftStartMinutes) {
@@ -772,6 +459,9 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                                 $extraAfterMinutes = $totalWorkedMinutes - $standardShiftMinutes;
                             }
 
+                            // ✅ محاسبه جمع تاخیر و اضافه کاری (تاخیر منفی، اضافه مثبت)
+                            $netExtraMinutes = $extraAfterMinutes - $lateMinutes;
+
                             $tooltip = "<strong>" . htmlspecialchars($user->getName()) . "</strong> (شیفت اصلی)<br>";
                             $tooltip .= "ورود: " . $firstStartStr . " | خروج: " . $lastEndStr;
 
@@ -787,6 +477,21 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                             if ($earlyMinutes > 0) {
                                 $tooltip .= "زودتر: " . minutesToTime($earlyMinutes) . " | ";
                             }
+
+                            // ✅ خط جدید: جمع تاخیر و اضافه کاری
+                            if ($netExtraMinutes != 0 || $lateMinutes > 0 || $extraAfterMinutes > 0) {
+                                $tooltip .= "<br><strong>جمع تاخیر/اضافه: ";
+                                if ($netExtraMinutes > 0) {
+                                    $tooltip .= "<span style='color:#27ae60;'>+" . formatDuration((int)$netExtraMinutes) . " اضافه کاری</span>";
+                                } elseif ($netExtraMinutes < 0) {
+                                    $tooltip .= "<span style='color:#e74c3c;'>" . formatDuration((int)abs($netExtraMinutes)) . " تاخیر</span>";
+                                } else {
+                                    $tooltip .= "<span style='color:#3498db;'>0 (تاخیر و اضافه مساوی)</span>";
+                                }
+                                $tooltip .= "</strong>";
+                            }
+
+                            $tooltip .= "<br>";
 
                             if ($totalWorkedMinutes >= $standardShiftMinutes) {
                                 $tooltip .= "24 ساعت";
@@ -806,29 +511,63 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                             $dayMinutes = 24 * 60;
                             ?>
 
-                            <div class="user-shift-container" style="position: relative; width: 100%; height: 32px;">
+                            <div class="user-shift-container">
 
                                 <?php
+                                // ✅ EARLY (زودتر آمدن) - قبل از 6 صبح - آبی
                                 if ($earlyMinutes > 0):
                                     $width = ($earlyMinutes / $dayMinutes) * 100;
+                                    // right = 0% یعنی از سمت راست (6 صبح) به چپ
+                                    $earlyRight = 0;
+
+                                    // محدود کردن عرض به 100%
+                                    $width = min($width, 100);
                                 ?>
-                                    <div class="shift-block" style="right: 0%; width: <?php echo $width; ?>%; background: #3498db; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>"></div>
+                                    <div class="shift-block" style="right: <?php echo $earlyRight; ?>%; width: <?php echo $width; ?>%; background: #3498db; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>">
+                                        <?php if ($width > 8): ?>
+                                            <small><?php echo minutesToTime($earlyMinutes); ?> زودتر</small>
+                                        <?php endif; ?>
+                                    </div>
                                 <?php endif; ?>
 
                                 <?php
+                                // ✅ LATE (تاخیر) - بعد از 6 صبح - قرمز
                                 if ($lateMinutes > 0):
                                     $width = ($lateMinutes / $dayMinutes) * 100;
-                                    $startRight = (($shiftStartMinutes - $firstStartMinutes) / $dayMinutes) * 100;
+                                    // از 6 صبح به بعد
+                                    $lateRight = (($shiftStartMinutes - 360) / $dayMinutes) * 100; // 360 = 6*60
+
+                                    // محدود کردن
+                                    $width = min($width, 100 - $lateRight);
                                 ?>
-                                    <div class="shift-block" style="right: <?php echo $startRight; ?>%; width: <?php echo $width; ?>%; background: #e74c3c; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>"></div>
+                                    <div class="shift-block" style="right: <?php echo max(0, $lateRight); ?>%; width: <?php echo $width; ?>%; background: #e74c3c; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>">
+                                        <?php if ($width > 8): ?>
+                                            <small><?php echo minutesToTime($lateMinutes); ?> تاخیر</small>
+                                        <?php endif; ?>
+                                    </div>
                                 <?php endif; ?>
 
                                 <?php
+                                // ✅ WORK SEGMENTS - سبز (اصلی) و نارنجی (اضافه)
                                 foreach ($segments as $segment):
                                     $segWidth = ($segment['duration'] / $dayMinutes) * 100;
-                                    $segStart = $segment['start'];
 
-                                    $segRight = (($segStart - $firstStartMinutes) / $dayMinutes) * 100;
+                                    // ✅ محاسبه right بر اساس ساعت 6 صبح (360 دقیقه)
+                                    $segRight = (($segment['start'] - 360) / $dayMinutes) * 100;
+
+                                    // اگر منفی شد، یعنی از روز قبل شروع شده، از 0 شروع کن
+                                    if ($segRight < 0) {
+                                        $segWidth += $segRight; // کم کردن از width
+                                        $segRight = 0;
+                                    }
+
+                                    // محدود کردن به 100%
+                                    if ($segRight + $segWidth > 100) {
+                                        $segWidth = 100 - $segRight;
+                                    }
+
+                                    // اطمینان از مثبت بودن عرض
+                                    $segWidth = max($segWidth, 0.5);
 
                                     if ($segment['type'] == 'work'):
                                         $workedBefore = 0;
@@ -839,33 +578,45 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                                             }
                                         }
 
-                                        if ($workedBefore >= $standardShiftMinutes) {
+                                        if ($workedBefore >= $standardShiftMinutes):
+                                            // ✅ اضافه کار بعد از 24 ساعت - نارنجی
                                 ?>
-                                            <div class="shift-block" style="right: <?php echo $segRight; ?>%; width: <?php echo $segWidth; ?>%; background: #f39c12; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>">
+                                            <div class="shift-block" style="right: <?php echo $segRight; ?>%; width: <?php echo $segWidth; ?>%; background: #00ccff; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>">
                                                 <?php if ($segWidth > 8): ?>
                                                     <small>+<?php echo minutesToTime((int)$segment['duration']); ?></small>
                                                 <?php endif; ?>
                                             </div>
                                         <?php
-                                        } elseif ($workedBefore + $segment['duration'] > $standardShiftMinutes) {
+                                        elseif ($workedBefore + $segment['duration'] > $standardShiftMinutes):
+                                            // ✅ قسمتی از 24 ساعت، قسمتی اضافه
                                             $mainPart = $standardShiftMinutes - $workedBefore;
                                             $extraPart = $segment['duration'] - $mainPart;
                                             $mainWidth = ($mainPart / $dayMinutes) * 100;
                                             $extraWidth = ($extraPart / $dayMinutes) * 100;
+
+                                            // تنظیم right برای هر دو
+                                            $mainRight = $segRight;
+                                            $extraRight = $segRight + (($mainPart / $segment['duration']) * $segWidth);
+
+                                            // محدود کردن
+                                            $mainWidth = min($mainWidth, 100 - $mainRight);
+                                            $extraRight = min($extraRight, 100 - $extraWidth);
                                         ?>
-                                            <div class="shift-block" style="right: <?php echo $segRight; ?>%; width: <?php echo $mainWidth; ?>%; background: #27ae60; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>"></div>
-                                            <div class="shift-block" style="right: <?php echo $segRight + $mainWidth; ?>%; width: <?php echo $extraWidth; ?>%; background: #f39c12; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>">
+                                            <div class="shift-block" style="right: <?php echo $mainRight; ?>%; width: <?php echo $mainWidth; ?>%; background: #27ae60; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>"></div>
+                                            <div class="shift-block" style="right: <?php echo $extraRight; ?>%; width: <?php echo $extraWidth; ?>%; background: #00aeff; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>">
                                                 <?php if ($extraWidth > 8): ?>
                                                     <small>+<?php echo minutesToTime((int)$extraPart); ?></small>
                                                 <?php endif; ?>
                                             </div>
                                         <?php
-                                        } else {
+                                        else:
+                                            // ✅ کاملاً داخل 24 ساعت - سبز
                                         ?>
                                             <div class="shift-block" style="right: <?php echo $segRight; ?>%; width: <?php echo $segWidth; ?>%; background: #27ae60; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>"></div>
                                         <?php
-                                        }
-                                    else: // gap
+                                        endif;
+                                    else:
+                                        // ✅ GAP - بنفش (غیبت)
                                         ?>
                                         <div class="shift-block gap-block" style="right: <?php echo $segRight; ?>%; width: <?php echo max($segWidth, 1); ?>%; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>"></div>
                                 <?php
@@ -873,14 +624,15 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                                 endforeach;
                                 ?>
 
-                                <div class="user-name-overlay" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>" style="height: 100%;">
+                                <div class="user-name-overlay" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>">
                                     <?php echo htmlspecialchars($user->getName()); ?>
                                 </div>
 
                             </div>
 
                             <?php
-                            // ✅ نمایش کاربران ثانویه (اضافه کار) - نوار باریک پایین
+                            // ✅ نمایش کاربران ثانویه (اضافه کار) - هر کدوم در یک خط جدا
+                            $secondaryIndex = 0;
                             foreach ($secondaryUsers as $secUserData):
                                 $secUser = $secUserData['user'];
                                 $secShifts = $secUserData['shifts'];
@@ -904,8 +656,8 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                                 $secDuration = ($secEndTime - $secStartTime) / 60;
                                 $secIsActive = !$secLast->getEndTime();
 
-                                // محاسبه موقعیت
-                                $secRight = (($secStartMinutes - $firstStartMinutes) / $dayMinutes) * 100;
+                                // ✅ محاسبه موقعیت نسبت به 6 صبح
+                                $secRight = (($secStartMinutes - 360) / $dayMinutes) * 100;
                                 $secWidth = (($secEndMinutes - $secStartMinutes) / $dayMinutes) * 100;
 
                                 // اگر منفی شد، از 0 شروع کن
@@ -913,7 +665,12 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                                     $secWidth += $secRight;
                                     $secRight = 0;
                                 }
-                                if ($secWidth > 100) $secWidth = 100;
+
+                                // محدود کردن به 100%
+                                if ($secRight + $secWidth > 100) {
+                                    $secWidth = 100 - $secRight;
+                                }
+                                $secWidth = max($secWidth, 1);
 
                                 $secTooltip = "<strong>" . htmlspecialchars($secUser->getName()) . "</strong> (اضافه کار)<br>";
                                 $secTooltip .= "ورود: " . $secStartStr . " | خروج: " . $secEndStr . "<br>";
@@ -921,19 +678,23 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                                 if ($secIsActive) {
                                     $secTooltip .= "<br>⚡ فعال";
                                 }
+
+                                // ✅ محاسبه موقعیت از پایین برای هر نگهبان (هر کدوم 26 پیکسل پایین‌تر)
+                                $bottomPosition = 6 + ($secondaryIndex * 26);
                             ?>
 
-                                <div class="secondary-shift-container" data-tooltip="<?php echo htmlspecialchars($secTooltip); ?>">
+                                <div class="secondary-shift-container" data-tooltip="<?php echo htmlspecialchars($secTooltip); ?>"
+                                    style="bottom: <?php echo $bottomPosition; ?>px;">
                                     <div class="secondary-shift-block <?php echo $secIsActive ? 'secondary-active' : ''; ?>"
                                         style="right: <?php echo max(0, $secRight); ?>%; width: <?php echo $secWidth; ?>%;">
-                                        <span style="z-index: 16; position: relative;">
-                                            <?php echo htmlspecialchars($secUser->getName()); ?>
-                                            (<?php echo $secStartStr; ?>-<?php echo $secEndStr; ?>)
-                                        </span>
+                                        <?php echo htmlspecialchars($secUser->getName()); ?> (<?php echo $secStartStr; ?>-<?php echo $secEndStr; ?>)
                                     </div>
                                 </div>
 
-                            <?php endforeach; ?>
+                            <?php
+                                $secondaryIndex++;
+                            endforeach;
+                            ?>
 
                         <?php else: ?>
                             <div class="no-shift">-</div>
@@ -986,6 +747,96 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
             });
         });
     </script>
+
+    <script>
+        // تنظیم ارتفاع داینامیک ردیف‌ها بر اساس تعداد اضافه کارها
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.day-row').forEach(row => {
+                const secondaryCount = row.querySelectorAll('.secondary-shift-container').length;
+                if (secondaryCount > 0) {
+                    const baseHeight = 100;
+                    const extraHeight = secondaryCount * 28 + 10; // 28px برای هر نگهبان + 10px فاصله
+                    row.style.minHeight = (baseHeight + extraHeight) + 'px';
+                    row.style.height = 'auto';
+                }
+            });
+        });
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // پیدا کردن ردیف امروز
+            const todayRow = document.querySelector('.day-row.today');
+
+            if (todayRow) {
+                // اسکرول به ردیف امروز با انیمیشن نرم
+                todayRow.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+
+                // اضافه کردن کلاس هاور بعد از 500 میلی‌ثانیه (بعد از تمام اسکرول)
+                setTimeout(() => {
+                    todayRow.classList.add('auto-hover');
+
+                    // پیدا کردن chart-box داخل ردیف امروز و اضافه کردن هاور
+                    const chartBox = todayRow.querySelector('.chart-box');
+                    if (chartBox) {
+                        chartBox.classList.add('auto-hover');
+                    }
+
+                    // پیدا کردن shift-block ها و اضافه کردن هاور
+                    const shiftBlocks = todayRow.querySelectorAll('.shift-block, .user-name-overlay');
+                    shiftBlocks.forEach(block => {
+                        block.classList.add('auto-hover');
+                    });
+
+                    // نمایش تولتیپ اگر وجود داشته باشد
+                    const tooltipElements = todayRow.querySelectorAll('[data-tooltip]');
+                    tooltipElements.forEach(el => {
+                        // شبیه‌سازی رویداد mouseenter برای نمایش تولتیپ
+                        const event = new MouseEvent('mouseenter', {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window
+                        });
+                        el.dispatchEvent(event);
+                    });
+
+                }, 500);
+
+                // برداشتن کلاس هاور بعد از 2.5 ثانیه (2 ثانیه هاور + 0.5 ثانیه تاخیر اولیه)
+                setTimeout(() => {
+                    todayRow.classList.remove('auto-hover');
+
+                    const chartBox = todayRow.querySelector('.chart-box');
+                    if (chartBox) {
+                        chartBox.classList.remove('auto-hover');
+                    }
+
+                    const shiftBlocks = todayRow.querySelectorAll('.shift-block, .user-name-overlay');
+                    shiftBlocks.forEach(block => {
+                        block.classList.remove('auto-hover');
+                    });
+
+                    // شبیه‌سازی رویداد mouseleave برای مخفی کردن تولتیپ
+                    const tooltipElements = todayRow.querySelectorAll('[data-tooltip]');
+                    tooltipElements.forEach(el => {
+                        const event = new MouseEvent('mouseleave', {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window
+                        });
+                        el.dispatchEvent(event);
+                    });
+
+                    // ❌ بخش اسکرول به بالا حذف شد - صفحه همونجا می‌مونه
+
+                }, 2500);
+            }
+        });
+    </script>
+
 </body>
 
 </html>
