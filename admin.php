@@ -205,6 +205,7 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
         }
     }
 }
+
 ?>
 
 <!DOCTYPE html>
@@ -250,10 +251,26 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
         </div>
 
         <div class="month-picker">
-            <form method="GET">
+            <form method="GET" id="monthForm">
                 <input type="hidden" name="csrf_token" value="<?php echo CSRF::generateToken(); ?>">
+                <input type="hidden" name="date" id="dateInput" value="<?php echo sprintf("%04d-%02d", $year, $month); ?>">
+
                 <label>ماه:</label>
-                <input type="month" name="date" value="<?php echo sprintf("%04d-%02d", $year, $month); ?>" onchange="this.form.submit()">
+                <select id="yearSelect" onchange="updateDate()">
+                    <?php for ($y = 1400; $y <= 1410; $y++): ?>
+                        <option value="<?php echo $y; ?>" <?php echo ($y == $year) ? 'selected' : ''; ?>>
+                            <?php echo $y; ?>
+                        </option>
+                    <?php endfor; ?>
+                </select>
+
+                <select id="monthSelect" onchange="updateDate()">
+                    <?php for ($m = 1; $m <= 12; $m++): ?>
+                        <option value="<?php echo sprintf("%02d", $m); ?>" <?php echo ($m == $month) ? 'selected' : ''; ?>>
+                            <?php echo $monthNames[$m]; ?>
+                        </option>
+                    <?php endfor; ?>
+                </select>
             </form>
         </div>
 
@@ -275,7 +292,7 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                 <span>شیفت اصلی</span>
             </div>
             <div class="legend-item">
-                <div class="legend-color" style="background: #9b59b6;"></div>
+                <div class="legend-color" style="background: #ff6b6b;"></div>
                 <span>غیبت</span>
             </div>
             <div class="legend-item">
@@ -775,66 +792,42 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                     block: 'center'
                 });
 
-                // اضافه کردن کلاس هاور بعد از 500 میلی‌ثانیه (بعد از تمام اسکرول)
-                setTimeout(() => {
-                    todayRow.classList.add('auto-hover');
+                // پیدا کردن chart-box داخل ردیف امروز
+                const chartBox = todayRow.querySelector('.chart-box');
+                if (chartBox) {
+                    // اضافه کردن هایلایت به باکس
+                    chartBox.classList.add('box-highlight');
 
-                    // پیدا کردن chart-box داخل ردیف امروز و اضافه کردن هاور
-                    const chartBox = todayRow.querySelector('.chart-box');
-                    if (chartBox) {
-                        chartBox.classList.add('auto-hover');
-                    }
-
-                    // پیدا کردن shift-block ها و اضافه کردن هاور
-                    const shiftBlocks = todayRow.querySelectorAll('.shift-block, .user-name-overlay');
+                    // پیدا کردن تمام المنت‌های داخل باکس که هایلایت روی آنها اعمال شود
+                    const shiftBlocks = chartBox.querySelectorAll('.shift-block, .user-name-overlay, .secondary-shift-container');
                     shiftBlocks.forEach(block => {
-                        block.classList.add('auto-hover');
+                        block.classList.add('inner-highlight');
                     });
+                }
 
-                    // نمایش تولتیپ اگر وجود داشته باشد
-                    const tooltipElements = todayRow.querySelectorAll('[data-tooltip]');
-                    tooltipElements.forEach(el => {
-                        // شبیه‌سازی رویداد mouseenter برای نمایش تولتیپ
-                        const event = new MouseEvent('mouseenter', {
-                            bubbles: true,
-                            cancelable: true,
-                            view: window
-                        });
-                        el.dispatchEvent(event);
-                    });
-
-                }, 500);
-
-                // برداشتن کلاس هاور بعد از 2.5 ثانیه (2 ثانیه هاور + 0.5 ثانیه تاخیر اولیه)
+                // بعد از 2 ثانیه هایلایت را برداریم
                 setTimeout(() => {
-                    todayRow.classList.remove('auto-hover');
-
-                    const chartBox = todayRow.querySelector('.chart-box');
                     if (chartBox) {
-                        chartBox.classList.remove('auto-hover');
-                    }
+                        chartBox.classList.remove('box-highlight');
 
-                    const shiftBlocks = todayRow.querySelectorAll('.shift-block, .user-name-overlay');
-                    shiftBlocks.forEach(block => {
-                        block.classList.remove('auto-hover');
-                    });
-
-                    // شبیه‌سازی رویداد mouseleave برای مخفی کردن تولتیپ
-                    const tooltipElements = todayRow.querySelectorAll('[data-tooltip]');
-                    tooltipElements.forEach(el => {
-                        const event = new MouseEvent('mouseleave', {
-                            bubbles: true,
-                            cancelable: true,
-                            view: window
+                        const shiftBlocks = chartBox.querySelectorAll('.shift-block, .user-name-overlay, .secondary-shift-container');
+                        shiftBlocks.forEach(block => {
+                            block.classList.remove('inner-highlight');
                         });
-                        el.dispatchEvent(event);
-                    });
-
-                    // ❌ بخش اسکرول به بالا حذف شد - صفحه همونجا می‌مونه
-
-                }, 2500);
+                    }
+                }, 2000);
             }
         });
+    </script>
+
+    <!-- نمایش تاریخ -->
+    <script>
+        function updateDate() {
+            var year = document.getElementById('yearSelect').value;
+            var month = document.getElementById('monthSelect').value;
+            document.getElementById('dateInput').value = year + '-' + month;
+            document.getElementById('monthForm').submit();
+        }
     </script>
 
 </body>
