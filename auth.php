@@ -16,7 +16,6 @@ if (isset($_POST['login'])) {
         $_SESSION['role'] = $user->getRole();
         $_SESSION['name'] = $user->getName();
 
-        // ریدایرکت به پنل مناسب
         if ($user->getRole() === 'admin') {
             header("Location: admin.php");
         } else {
@@ -37,39 +36,6 @@ if (isset($_POST['login'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ورود به سیستم</title>
     <link rel="stylesheet" href="style.css">
-    <style>
-        .login-container {
-            max-width: 400px;
-            margin: 50px auto;
-        }
-
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            text-align: center;
-        }
-
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-family: inherit;
-        }
-    </style>
 </head>
 
 <body>
@@ -81,8 +47,6 @@ if (isset($_POST['login'])) {
         <?php endif; ?>
 
         <form method="post">
-            <input type="hidden" name="csrf_token" value="<?php echo CSRF::generateToken(); ?>">
-
             <div class="form-group">
                 <label>نام کاربری:</label>
                 <input type="text" name="username" required autofocus>

@@ -2,10 +2,6 @@
 session_start();
 require_once 'classes.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !CSRF::validateToken($_POST['csrf_token'] ?? '')) {
-    die('Invalid CSRF token');
-}
-
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     header("Location: auth.php");
     exit();
@@ -39,8 +35,9 @@ if (isset($_POST['auto_schedule'])) {
     $lastGuardId = null;
     $lastGuardIndex = -1;
 
-    if (!empty($prevSchedule) && isset($prevSchedule[$daysInPrevMonth])) {
-        $lastGuardId = $prevSchedule[$daysInPrevMonth];
+    $prevScheduleVars = get_object_vars($prevSchedule);
+    if (!empty($prevScheduleVars) && isset($prevSchedule->{$daysInPrevMonth})) {
+        $lastGuardId = $prevSchedule->{$daysInPrevMonth};
         foreach ($guards as $index => $guard) {
             if ($guard->getId() == $lastGuardId) {
                 $lastGuardIndex = $index;
@@ -89,8 +86,8 @@ if ($dateInput && strlen($dateInput) == 7) {
     $month = (int)substr($dateInput, 5, 2);
 } else {
     $today = JalaliDate::getToday();
-    $year = $today['year'];
-    $month = $today['month'];
+    $year = $today->year;
+    $month = $today->month;
 }
 
 $monthNames = JalaliDate::$month_names;
@@ -104,26 +101,6 @@ $shiftStartMinutes = $activeSetting->getStartMinutes();
 $shiftEndMinutes = $activeSetting->getEndMinutes();
 
 $standardShiftMinutes = 24 * 60;
-
-function minutesToTime($minutes)
-{
-    $hours = floor($minutes / 60);
-    $mins = $minutes % 60;
-    return sprintf("%02d:%02d", $hours, $mins);
-}
-
-function formatDuration($minutes)
-{
-    $hours = floor($minutes / 60);
-    $mins = $minutes % 60;
-    if ($hours > 0 && $mins > 0) {
-        return $hours . " ساعت و " . $mins . " دقیقه";
-    } elseif ($hours > 0) {
-        return $hours . " ساعت";
-    } else {
-        return $mins . " دقیقه";
-    }
-}
 
 $todayGregorian = date('Y-m-d');
 $todayJalali = JalaliDate::getToday();
@@ -141,9 +118,10 @@ $dbSchedule = $scheduleModel->getMonthSchedule($year, $month);
 
 if ($guardCount > 0) {
     for ($day = 1; $day <= $daysInMonth; $day++) {
-        if (isset($dbSchedule[$day])) {
+        $dbScheduleVars = get_object_vars($dbSchedule);
+        if (isset($dbSchedule->{$day})) {
             foreach ($guards as $guard) {
-                if ($guard->getId() == $dbSchedule[$day]) {
+                if ($guard->getId() == $dbSchedule->{$day}) {
                     $guardSchedule[$day] = $guard;
                     break;
                 }
@@ -156,36 +134,34 @@ if ($guardCount > 0) {
     }
 }
 
-$shiftsByDay = [];
+$shiftsByDay = new stdClass();
 foreach ($allShifts as $shift) {
     $startTime = strtotime($shift->getStartTime());
     $startDate = date('Y-m-d', $startTime);
     $startParts = explode('-', $startDate);
     $jalaliStart = JalaliDate::gregorianToJalali($startParts[0], $startParts[1], $startParts[2]);
 
-    if ($jalaliStart['year'] == $year && $jalaliStart['month'] == $month) {
-        $day = $jalaliStart['day'];
-        if (!isset($shiftsByDay[$day])) $shiftsByDay[$day] = [];
+    if ($jalaliStart->year == $year && $jalaliStart->month == $month) {
+        $day = $jalaliStart->day;
+        if (!isset($shiftsByDay->{$day})) $shiftsByDay->{$day} = new stdClass();
 
         $userId = $shift->getUser()->getId();
-        if (!isset($shiftsByDay[$day][$userId])) {
-            $shiftsByDay[$day][$userId] = [
-                'user' => $shift->getUser(),
-                'shifts' => []
-            ];
+        if (!isset($shiftsByDay->{$day}->{$userId})) {
+            $shiftsByDay->{$day}->{$userId} = new stdClass();
+            $shiftsByDay->{$day}->{$userId}->user = $shift->getUser();
+            $shiftsByDay->{$day}->{$userId}->shifts = [];
         }
-        $shiftsByDay[$day][$userId]['shifts'][] = $shift;
+        $shiftsByDay->{$day}->{$userId}->shifts[] = $shift;
     }
 }
 
-foreach ($shiftsByDay as $day => &$users) {
-    foreach ($users as &$userData) {
-        usort($userData['shifts'], function ($a, $b) {
+foreach (get_object_vars($shiftsByDay) as $day => $users) {
+    foreach (get_object_vars($users) as $userId => $userData) {
+        usort($userData->shifts, function ($a, $b) {
             return strtotime($a->getStartTime()) - strtotime($b->getStartTime());
         });
     }
 }
-unset($users, $userData);
 
 $prevMonth = $month - 1;
 $prevYear = $year;
@@ -197,9 +173,10 @@ $daysInPrevMonth = JalaliDate::getMonthDays($prevYear, $prevMonth);
 $prevDbSchedule = $scheduleModel->getMonthSchedule($prevYear, $prevMonth);
 $lastScheduledGuard = 'نامشخص';
 
-if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
+$prevDbScheduleVars = get_object_vars($prevDbSchedule);
+if (!empty($prevDbScheduleVars) && isset($prevDbSchedule->{$daysInPrevMonth})) {
     foreach ($guards as $guard) {
-        if ($guard->getId() == $prevDbSchedule[$daysInPrevMonth]) {
+        if ($guard->getId() == $prevDbSchedule->{$daysInPrevMonth}) {
             $lastScheduledGuard = $guard->getName();
             break;
         }
@@ -222,7 +199,7 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
 <body>
     <div class="card admin-panel">
         <div class="test-date">
-            📅 امروز: <?php echo JalaliDate::format($todayJalali['year'], $todayJalali['month'], $todayJalali['day'], 'l، d F Y'); ?>
+            📅 امروز: <?php echo JalaliDate::format($todayJalali->year, $todayJalali->month, $todayJalali->day, 'l، d F Y'); ?>
             (میلادی: <?php echo date('Y-m-d l'); ?>)
         </div>
 
@@ -239,7 +216,6 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
             <h3>⚙️ مدیریت شیفت‌بندی</h3>
 
             <form method="post" style="display: inline-block;">
-                <input type="hidden" name="csrf_token" value="<?php echo CSRF::generateToken(); ?>">
                 <input type="hidden" name="target_year" value="<?php echo $year; ?>">
                 <input type="hidden" name="target_month" value="<?php echo $month; ?>">
 
@@ -252,7 +228,6 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
 
         <div class="month-picker">
             <form method="GET" id="monthForm">
-                <input type="hidden" name="csrf_token" value="<?php echo CSRF::generateToken(); ?>">
                 <input type="hidden" name="date" id="dateInput" value="<?php echo sprintf("%04d-%02d", $year, $month); ?>">
 
                 <label>ماه:</label>
@@ -267,7 +242,7 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                 <select id="monthSelect" onchange="updateDate()">
                     <?php for ($m = 1; $m <= 12; $m++): ?>
                         <option value="<?php echo sprintf("%02d", $m); ?>" <?php echo ($m == $month) ? 'selected' : ''; ?>>
-                            <?php echo $monthNames[$m]; ?>
+                            <?php echo $monthNames->{$m}; ?>
                         </option>
                     <?php endfor; ?>
                 </select>
@@ -304,16 +279,9 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
         <div class="gantt-wrapper">
             <div class="gantt-title">
                 <h2>
-                    <?php echo $monthNames[$month]; ?> <?php echo $year; ?>
-                    <?php
-                    $dbCount = count($dbSchedule);
-                    // if ($dbCount > 0) {
-                    //     echo '<span style="font-size: 14px; color: #d4edda;">( ' . $dbCount . ' روز از دیتابیس )</span>';
-                    // }
-                    ?>
+                    <?php echo $monthNames->{$month}; ?> <?php echo $year; ?>
                 </h2>
             </div>
-
 
             <?php for ($day = 1; $day <= $daysInMonth; $day++):
                 $gregorian = JalaliDate::jalaliToGregorian($year, $month, $day);
@@ -323,29 +291,28 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
 
                 $isFriday = ($dayOfWeek == 'جمعه');
                 $isToday = ($dateStr == $todayGregorian);
-                $dayUsers = isset($shiftsByDay[$day]) ? $shiftsByDay[$day] : [];
+                $dayUsers = isset($shiftsByDay->{$day}) ? $shiftsByDay->{$day} : new stdClass();
                 $scheduledGuard = isset($guardSchedule[$day]) ? $guardSchedule[$day] : null;
-                $hasCheckin = !empty($dayUsers);
-                $userCount = count($dayUsers);
+                $hasCheckin = !empty(get_object_vars($dayUsers));
+                $userCount = count(get_object_vars($dayUsers));
 
-                $isFromDb = isset($dbSchedule[$day]);
+                $dbScheduleVars = get_object_vars($dbSchedule);
+                $isFromDb = isset($dbSchedule->{$day});
 
-                // ✅ جدا کردن کاربر اصلی از اضافه کار
                 $primaryUser = null;
                 $secondaryUsers = [];
 
                 if ($hasCheckin && $scheduledGuard) {
-                    foreach ($dayUsers as $userId => $userData) {
-                        if ($userData['user']->getId() == $scheduledGuard->getId()) {
+                    foreach (get_object_vars($dayUsers) as $userId => $userData) {
+                        if ($userData->user->getId() == $scheduledGuard->getId()) {
                             $primaryUser = $userData;
                         } else {
                             $secondaryUsers[] = $userData;
                         }
                     }
                 } else {
-                    // اگر شیفت مشخص نیست، اولی اصلیه، بقیه اضافه
                     $first = true;
-                    foreach ($dayUsers as $userId => $userData) {
+                    foreach (get_object_vars($dayUsers) as $userId => $userData) {
                         if ($first) {
                             $primaryUser = $userData;
                             $first = false;
@@ -355,11 +322,10 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                     }
                 }
 
-                // ✅ محاسبه ساعت ناقص برای کاربر اصلی
                 $isIncomplete = false;
                 if ($primaryUser) {
                     $totalWorked = 0;
-                    foreach ($primaryUser['shifts'] as $shift) {
+                    foreach ($primaryUser->shifts as $shift) {
                         $s = strtotime($shift->getStartTime());
                         $e = $shift->getEndTime() ? strtotime($shift->getEndTime()) : time();
                         $totalWorked += ($e - $s) / 60;
@@ -390,9 +356,8 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                         <?php elseif ($primaryUser): ?>
 
                             <?php
-                            // ✅ نمایش کاربر اصلی (شیفت وظیفه‌ای)
-                            $user = $primaryUser['user'];
-                            $userShifts = $primaryUser['shifts'];
+                            $user = $primaryUser->user;
+                            $userShifts = $primaryUser->shifts;
 
                             $firstShift = $userShifts[0];
                             $lastShift = $userShifts[count($userShifts) - 1];
@@ -428,12 +393,12 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                                 $duration = ($eTime - $sTime) / 60;
                                 $totalWorkedMinutes += $duration;
 
-                                $segments[] = [
-                                    'type' => 'work',
-                                    'start' => $sMinutes,
-                                    'end' => $eMinutes,
-                                    'duration' => $duration
-                                ];
+                                $segment = new stdClass();
+                                $segment->type = 'work';
+                                $segment->start = $sMinutes;
+                                $segment->end = $eMinutes;
+                                $segment->duration = $duration;
+                                $segments[] = $segment;
 
                                 if ($i < count($userShifts) - 1) {
                                     $nextShift = $userShifts[$i + 1];
@@ -445,17 +410,16 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                                     }
 
                                     if ($nextSMinutes > $eMinutes) {
-                                        $segments[] = [
-                                            'type' => 'gap',
-                                            'start' => $eMinutes,
-                                            'end' => $nextSMinutes,
-                                            'duration' => $nextSMinutes - $eMinutes
-                                        ];
+                                        $gapSegment = new stdClass();
+                                        $gapSegment->type = 'gap';
+                                        $gapSegment->start = $eMinutes;
+                                        $gapSegment->end = $nextSMinutes;
+                                        $gapSegment->duration = $nextSMinutes - $eMinutes;
+                                        $segments[] = $gapSegment;
                                     }
                                 }
                             }
 
-                            // ✅ محاسبه early/late نسبت به شروع شیفت استاندارد (6 صبح)
                             $earlyMinutes = 0;
                             $lateMinutes = 0;
                             if ($firstStartMinutes < $shiftStartMinutes) {
@@ -466,8 +430,8 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
 
                             $totalGapMinutes = 0;
                             foreach ($segments as $seg) {
-                                if ($seg['type'] == 'gap') {
-                                    $totalGapMinutes += $seg['duration'];
+                                if ($seg->type == 'gap') {
+                                    $totalGapMinutes += $seg->duration;
                                 }
                             }
 
@@ -476,32 +440,30 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                                 $extraAfterMinutes = $totalWorkedMinutes - $standardShiftMinutes;
                             }
 
-                            // ✅ محاسبه جمع تاخیر و اضافه کاری (تاخیر منفی، اضافه مثبت)
                             $netExtraMinutes = $extraAfterMinutes - $lateMinutes;
 
                             $tooltip = "<strong>" . htmlspecialchars($user->getName()) . "</strong> (شیفت اصلی)<br>";
                             $tooltip .= "ورود: " . $firstStartStr . " | خروج: " . $lastEndStr;
 
                             if ($totalGapMinutes > 0) {
-                                $tooltip .= "<br>غیبت: " . minutesToTime((int)$totalGapMinutes);
+                                $tooltip .= "<br>غیبت: " . TimeFormatter::minutesToTime((int)$totalGapMinutes);
                             }
 
                             $tooltip .= "<br>";
 
                             if ($lateMinutes > 0) {
-                                $tooltip .= "تاخیر: " . minutesToTime($lateMinutes) . " | ";
+                                $tooltip .= "تاخیر: " . TimeFormatter::minutesToTime($lateMinutes) . " | ";
                             }
                             if ($earlyMinutes > 0) {
-                                $tooltip .= "زودتر: " . minutesToTime($earlyMinutes) . " | ";
+                                $tooltip .= "زودتر: " . TimeFormatter::minutesToTime($earlyMinutes) . " | ";
                             }
 
-                            // ✅ خط جدید: جمع تاخیر و اضافه کاری
                             if ($netExtraMinutes != 0 || $lateMinutes > 0 || $extraAfterMinutes > 0) {
                                 $tooltip .= "<br><strong>جمع تاخیر/اضافه: ";
                                 if ($netExtraMinutes > 0) {
-                                    $tooltip .= "<span style='color:#27ae60;'>+" . formatDuration((int)$netExtraMinutes) . " اضافه کاری</span>";
+                                    $tooltip .= "<span style='color:#27ae60;'>+" . TimeFormatter::formatDuration((int)$netExtraMinutes) . " اضافه کاری</span>";
                                 } elseif ($netExtraMinutes < 0) {
-                                    $tooltip .= "<span style='color:#e74c3c;'>" . formatDuration((int)abs($netExtraMinutes)) . " تاخیر</span>";
+                                    $tooltip .= "<span style='color:#e74c3c;'>" . TimeFormatter::formatDuration((int)abs($netExtraMinutes)) . " تاخیر</span>";
                                 } else {
                                     $tooltip .= "<span style='color:#3498db;'>0 (تاخیر و اضافه مساوی)</span>";
                                 }
@@ -513,12 +475,12 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                             if ($totalWorkedMinutes >= $standardShiftMinutes) {
                                 $tooltip .= "24 ساعت";
                                 if ($extraAfterMinutes > 0) {
-                                    $tooltip .= " + " . formatDuration((int)$extraAfterMinutes) . " اضافه";
+                                    $tooltip .= " + " . TimeFormatter::formatDuration((int)$extraAfterMinutes) . " اضافه";
                                 }
                                 $tooltip .= " ✓";
                             } else {
                                 $shortage = $standardShiftMinutes - $totalWorkedMinutes;
-                                $tooltip .= "<span style='color:#ff6b6b;'>⚠️ ناقص: " . formatDuration((int)$shortage) . "</span>";
+                                $tooltip .= "<span style='color:#ff6b6b;'>⚠️ ناقص: " . TimeFormatter::formatDuration((int)$shortage) . "</span>";
                             }
 
                             if ($isActive) {
@@ -530,114 +492,85 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
 
                             <div class="user-shift-container">
 
-                                <?php
-                                // ✅ EARLY (زودتر آمدن) - قبل از 6 صبح - آبی
-                                if ($earlyMinutes > 0):
+                                <?php if ($earlyMinutes > 0):
                                     $width = ($earlyMinutes / $dayMinutes) * 100;
-                                    // right = 0% یعنی از سمت راست (6 صبح) به چپ
                                     $earlyRight = 0;
-
-                                    // محدود کردن عرض به 100%
                                     $width = min($width, 100);
                                 ?>
                                     <div class="shift-block" style="right: <?php echo $earlyRight; ?>%; width: <?php echo $width; ?>%; background: #3498db; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>">
                                         <?php if ($width > 8): ?>
-                                            <small><?php echo minutesToTime($earlyMinutes); ?> زودتر</small>
+                                            <small><?php echo TimeFormatter::minutesToTime($earlyMinutes); ?> زودتر</small>
                                         <?php endif; ?>
                                     </div>
                                 <?php endif; ?>
 
-                                <?php
-                                // ✅ LATE (تاخیر) - بعد از 6 صبح - قرمز
-                                if ($lateMinutes > 0):
+                                <?php if ($lateMinutes > 0):
                                     $width = ($lateMinutes / $dayMinutes) * 100;
-                                    // از 6 صبح به بعد
-                                    $lateRight = (($shiftStartMinutes - 360) / $dayMinutes) * 100; // 360 = 6*60
-
-                                    // محدود کردن
+                                    $lateRight = (($shiftStartMinutes - 360) / $dayMinutes) * 100;
                                     $width = min($width, 100 - $lateRight);
                                 ?>
                                     <div class="shift-block" style="right: <?php echo max(0, $lateRight); ?>%; width: <?php echo $width; ?>%; background: #e74c3c; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>">
                                         <?php if ($width > 8): ?>
-                                            <small><?php echo minutesToTime($lateMinutes); ?> تاخیر</small>
+                                            <small><?php echo TimeFormatter::minutesToTime($lateMinutes); ?> تاخیر</small>
                                         <?php endif; ?>
                                     </div>
                                 <?php endif; ?>
 
-                                <?php
-                                // ✅ WORK SEGMENTS - سبز (اصلی) و نارنجی (اضافه)
-                                foreach ($segments as $segment):
-                                    $segWidth = ($segment['duration'] / $dayMinutes) * 100;
+                                <?php foreach ($segments as $segment):
+                                    $segWidth = ($segment->duration / $dayMinutes) * 100;
+                                    $segRight = (($segment->start - 360) / $dayMinutes) * 100;
 
-                                    // ✅ محاسبه right بر اساس ساعت 6 صبح (360 دقیقه)
-                                    $segRight = (($segment['start'] - 360) / $dayMinutes) * 100;
-
-                                    // اگر منفی شد، یعنی از روز قبل شروع شده، از 0 شروع کن
                                     if ($segRight < 0) {
-                                        $segWidth += $segRight; // کم کردن از width
+                                        $segWidth += $segRight;
                                         $segRight = 0;
                                     }
 
-                                    // محدود کردن به 100%
                                     if ($segRight + $segWidth > 100) {
                                         $segWidth = 100 - $segRight;
                                     }
 
-                                    // اطمینان از مثبت بودن عرض
                                     $segWidth = max($segWidth, 0.5);
 
-                                    if ($segment['type'] == 'work'):
+                                    if ($segment->type == 'work'):
                                         $workedBefore = 0;
                                         foreach ($segments as $prev) {
                                             if ($prev === $segment) break;
-                                            if ($prev['type'] == 'work') {
-                                                $workedBefore += $prev['duration'];
+                                            if ($prev->type == 'work') {
+                                                $workedBefore += $prev->duration;
                                             }
                                         }
 
                                         if ($workedBefore >= $standardShiftMinutes):
-                                            // ✅ اضافه کار بعد از 24 ساعت - نارنجی
                                 ?>
                                             <div class="shift-block" style="right: <?php echo $segRight; ?>%; width: <?php echo $segWidth; ?>%; background: #00ccff; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>">
                                                 <?php if ($segWidth > 8): ?>
-                                                    <small>+<?php echo minutesToTime((int)$segment['duration']); ?></small>
+                                                    <small>+<?php echo TimeFormatter::minutesToTime((int)$segment->duration); ?></small>
                                                 <?php endif; ?>
                                             </div>
-                                        <?php
-                                        elseif ($workedBefore + $segment['duration'] > $standardShiftMinutes):
-                                            // ✅ قسمتی از 24 ساعت، قسمتی اضافه
+                                        <?php elseif ($workedBefore + $segment->duration > $standardShiftMinutes):
                                             $mainPart = $standardShiftMinutes - $workedBefore;
-                                            $extraPart = $segment['duration'] - $mainPart;
+                                            $extraPart = $segment->duration - $mainPart;
                                             $mainWidth = ($mainPart / $dayMinutes) * 100;
                                             $extraWidth = ($extraPart / $dayMinutes) * 100;
 
-                                            // تنظیم right برای هر دو
                                             $mainRight = $segRight;
-                                            $extraRight = $segRight + (($mainPart / $segment['duration']) * $segWidth);
+                                            $extraRight = $segRight + (($mainPart / $segment->duration) * $segWidth);
 
-                                            // محدود کردن
                                             $mainWidth = min($mainWidth, 100 - $mainRight);
                                             $extraRight = min($extraRight, 100 - $extraWidth);
                                         ?>
                                             <div class="shift-block" style="right: <?php echo $mainRight; ?>%; width: <?php echo $mainWidth; ?>%; background: #27ae60; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>"></div>
                                             <div class="shift-block" style="right: <?php echo $extraRight; ?>%; width: <?php echo $extraWidth; ?>%; background: #00aeff; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>">
                                                 <?php if ($extraWidth > 8): ?>
-                                                    <small>+<?php echo minutesToTime((int)$extraPart); ?></small>
+                                                    <small>+<?php echo TimeFormatter::minutesToTime((int)$extraPart); ?></small>
                                                 <?php endif; ?>
                                             </div>
-                                        <?php
-                                        else:
-                                            // ✅ کاملاً داخل 24 ساعت - سبز
-                                        ?>
+                                        <?php else: ?>
                                             <div class="shift-block" style="right: <?php echo $segRight; ?>%; width: <?php echo $segWidth; ?>%; background: #27ae60; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>"></div>
-                                        <?php
-                                        endif;
-                                    else:
-                                        // ✅ GAP - بنفش (غیبت)
-                                        ?>
+                                        <?php endif;
+                                    else: ?>
                                         <div class="shift-block gap-block" style="right: <?php echo $segRight; ?>%; width: <?php echo max($segWidth, 1); ?>%; height: 100%;" data-tooltip="<?php echo htmlspecialchars($tooltip); ?>"></div>
-                                <?php
-                                    endif;
+                                <?php endif;
                                 endforeach;
                                 ?>
 
@@ -648,11 +581,10 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                             </div>
 
                             <?php
-                            // ✅ نمایش کاربران ثانویه (اضافه کار) - هر کدوم در یک خط جدا
                             $secondaryIndex = 0;
                             foreach ($secondaryUsers as $secUserData):
-                                $secUser = $secUserData['user'];
-                                $secShifts = $secUserData['shifts'];
+                                $secUser = $secUserData->user;
+                                $secShifts = $secUserData->shifts;
 
                                 $secFirst = $secShifts[0];
                                 $secLast = $secShifts[count($secShifts) - 1];
@@ -673,17 +605,14 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
                                 $secDuration = ($secEndTime - $secStartTime) / 60;
                                 $secIsActive = !$secLast->getEndTime();
 
-                                // ✅ محاسبه موقعیت نسبت به 6 صبح
                                 $secRight = (($secStartMinutes - 360) / $dayMinutes) * 100;
                                 $secWidth = (($secEndMinutes - $secStartMinutes) / $dayMinutes) * 100;
 
-                                // اگر منفی شد، از 0 شروع کن
                                 if ($secRight < 0) {
                                     $secWidth += $secRight;
                                     $secRight = 0;
                                 }
 
-                                // محدود کردن به 100%
                                 if ($secRight + $secWidth > 100) {
                                     $secWidth = 100 - $secRight;
                                 }
@@ -691,12 +620,11 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
 
                                 $secTooltip = "<strong>" . htmlspecialchars($secUser->getName()) . "</strong> (اضافه کار)<br>";
                                 $secTooltip .= "ورود: " . $secStartStr . " | خروج: " . $secEndStr . "<br>";
-                                $secTooltip .= "مدت: " . formatDuration((int)$secDuration);
+                                $secTooltip .= "مدت: " . TimeFormatter::formatDuration((int)$secDuration);
                                 if ($secIsActive) {
                                     $secTooltip .= "<br>⚡ فعال";
                                 }
 
-                                // ✅ محاسبه موقعیت از پایین برای هر نگهبان (هر کدوم 26 پیکسل پایین‌تر)
                                 $bottomPosition = 6 + ($secondaryIndex * 26);
                             ?>
 
@@ -766,13 +694,12 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
     </script>
 
     <script>
-        // تنظیم ارتفاع داینامیک ردیف‌ها بر اساس تعداد اضافه کارها
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.day-row').forEach(row => {
                 const secondaryCount = row.querySelectorAll('.secondary-shift-container').length;
                 if (secondaryCount > 0) {
                     const baseHeight = 100;
-                    const extraHeight = secondaryCount * 28 + 10; // 28px برای هر نگهبان + 10px فاصله
+                    const extraHeight = secondaryCount * 28 + 10;
                     row.style.minHeight = (baseHeight + extraHeight) + 'px';
                     row.style.height = 'auto';
                 }
@@ -782,30 +709,24 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // پیدا کردن ردیف امروز
             const todayRow = document.querySelector('.day-row.today');
 
             if (todayRow) {
-                // اسکرول به ردیف امروز با انیمیشن نرم
                 todayRow.scrollIntoView({
                     behavior: 'smooth',
                     block: 'center'
                 });
 
-                // پیدا کردن chart-box داخل ردیف امروز
                 const chartBox = todayRow.querySelector('.chart-box');
                 if (chartBox) {
-                    // اضافه کردن هایلایت به باکس
                     chartBox.classList.add('box-highlight');
 
-                    // پیدا کردن تمام المنت‌های داخل باکس که هایلایت روی آنها اعمال شود
                     const shiftBlocks = chartBox.querySelectorAll('.shift-block, .user-name-overlay, .secondary-shift-container');
                     shiftBlocks.forEach(block => {
                         block.classList.add('inner-highlight');
                     });
                 }
 
-                // بعد از 2 ثانیه هایلایت را برداریم
                 setTimeout(() => {
                     if (chartBox) {
                         chartBox.classList.remove('box-highlight');
@@ -820,7 +741,6 @@ if (!empty($prevDbSchedule) && isset($prevDbSchedule[$daysInPrevMonth])) {
         });
     </script>
 
-    <!-- نمایش تاریخ -->
     <script>
         function updateDate() {
             var year = document.getElementById('yearSelect').value;

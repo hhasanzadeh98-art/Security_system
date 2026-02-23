@@ -11,9 +11,13 @@ class Database
 
     private function __construct()
     {
-        $this->conn = new mysqli($this->host, $this->username, $this->password, $this->db_name);
-        if ($this->conn) {
-            $this->conn->set_charset("utf8mb4");
+        try {
+            $dsn = "mysql:host={$this->host};dbname={$this->db_name};charset=utf8mb4";
+            $this->conn = new PDO($dsn, $this->username, $this->password);
+            $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $this->conn->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_OBJ);
+        } catch (PDOException $e) {
+            die("Connection failed: " . $e->getMessage());
         }
     }
 

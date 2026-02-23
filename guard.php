@@ -2,10 +2,6 @@
 session_start();
 require_once 'classes.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !CSRF::validateToken($_POST['csrf_token'] ?? '')) {
-    die('Invalid CSRF token');
-}
-
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'guard') {
     header("Location: auth.php");
     exit();
@@ -22,17 +18,15 @@ foreach ($allGuards as $guard) {
     $guards[] = $guard;
 }
 
-// ✅ استفاده از کلاس JalaliDate برای تاریخ امروز
 $todayJalali = JalaliDate::getToday();
-$gregorianParts = JalaliDate::jalaliToGregorian($todayJalali['year'], $todayJalali['month'], $todayJalali['day']);
+$gregorianParts = JalaliDate::jalaliToGregorian($todayJalali->year, $todayJalali->month, $todayJalali->day);
 
-// محاسبه شیفت‌بندی چرخشی
 $guardCount = count($guards);
 $scheduledGuardId = null;
 $todayGuard = null;
 
 if ($guardCount > 0) {
-    $dayOfYear = JalaliDate::getDayOfYear($todayJalali['year'], $todayJalali['month'], $todayJalali['day']);
+    $dayOfYear = JalaliDate::getDayOfYear($todayJalali->year, $todayJalali->month, $todayJalali->day);
     $guardIndex = ($dayOfYear - 1) % $guardCount;
     $scheduledGuardId = $guards[$guardIndex]->getId();
     $todayGuard = $guards[$guardIndex];
@@ -47,7 +41,7 @@ if ($active_shift) {
     $shiftParts = explode('-', $shiftGregorian);
     $shiftJalali = JalaliDate::gregorianToJalali($shiftParts[0], $shiftParts[1], $shiftParts[2]);
 
-    $shiftDayOfYear = JalaliDate::getDayOfYear($shiftJalali['year'], $shiftJalali['month'], $shiftJalali['day']);
+    $shiftDayOfYear = JalaliDate::getDayOfYear($shiftJalali->year, $shiftJalali->month, $shiftJalali->day);
     $shiftGuardIndex = ($shiftDayOfYear - 1) % $guardCount;
     $shiftScheduledGuardId = $guards[$shiftGuardIndex]->getId();
 
@@ -70,24 +64,8 @@ if (isset($_POST['end_shift']) && $active_shift) {
     }
 }
 
-// ✅ استفاده از توابع صحیح JalaliDate
-$monthNames = JalaliDate::$month_names;
-$todayJalaliFormatted = JalaliDate::format($todayJalali['year'], $todayJalali['month'], $todayJalali['day'], 'd F Y');
-$todayWeekday = JalaliDate::getWeekday($todayJalali['year'], $todayJalali['month'], $todayJalali['day']);
-
-function convertToJalaliDateTime($datetime)
-{
-    $timestamp = strtotime($datetime);
-    $g_y = date('Y', $timestamp);
-    $g_m = date('m', $timestamp);
-    $g_d = date('d', $timestamp);
-    $time = date('H:i:s', $timestamp);
-
-    $jalali = JalaliDate::gregorianToJalali($g_y, $g_m, $g_d);
-    $monthNames = JalaliDate::$month_names;
-
-    return $jalali['day'] . ' ' . $monthNames[$jalali['month']] . ' ' . $jalali['year'] . ' - ' . $time;
-}
+$todayJalaliFormatted = JalaliDate::format($todayJalali->year, $todayJalali->month, $todayJalali->day, 'd F Y');
+$todayWeekday = JalaliDate::getWeekday($todayJalali->year, $todayJalali->month, $todayJalali->day);
 ?>
 
 <!DOCTYPE html>
@@ -98,25 +76,12 @@ function convertToJalaliDateTime($datetime)
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>پنل نگهبان</title>
     <link rel="stylesheet" href="style.css">
-    <style>
-        .test-date {
-            background: #e3f2fd;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            text-align: center;
-            font-weight: bold;
-            color: #1976d2;
-            font-size: 13px;
-        }
-    </style>
 </head>
 
 <body>
     <div class="card">
-        <!-- ✅ نمایش تاریخ صحیح برای تست -->
         <div class="test-date">
-            📅 امروز: <?php echo JalaliDate::format($todayJalali['year'], $todayJalali['month'], $todayJalali['day'], 'l، d F Y'); ?>
+            📅 امروز: <?php echo JalaliDate::format($todayJalali->year, $todayJalali->month, $todayJalali->day, 'l، d F Y'); ?>
             (میلادی: <?php echo date('Y-m-d l'); ?>)
         </div>
 
@@ -140,11 +105,10 @@ function convertToJalaliDateTime($datetime)
 
             <div class="shift-info">
                 <strong>زمان ورود:</strong><br>
-                <?php echo convertToJalaliDateTime($active_shift->getStartTime()); ?>
+                <?php echo DateTimeConverter::convertToJalaliDateTime($active_shift->getStartTime()); ?>
             </div>
 
             <form method="post">
-                <input type="hidden" name="csrf_token" value="<?php echo CSRF::generateToken(); ?>">
                 <button type="submit" name="end_shift" class="btn btn-end">پایان شیفت (خروج)</button>
             </form>
 
@@ -157,7 +121,6 @@ function convertToJalaliDateTime($datetime)
                 </div>
 
                 <form method="post">
-                    <input type="hidden" name="csrf_token" value="<?php echo CSRF::generateToken(); ?>">
                     <button type="submit" name="start_shift" class="btn btn-start">شروع شیفت (ورود)</button>
                 </form>
 
@@ -168,7 +131,6 @@ function convertToJalaliDateTime($datetime)
                 </div>
 
                 <form method="post">
-                    <input type="hidden" name="csrf_token" value="<?php echo CSRF::generateToken(); ?>">
                     <div class="extra-checkbox">
                         <input type="checkbox" name="is_extra" id="is_extra" value="1" required>
                         <label for="is_extra">
