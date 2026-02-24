@@ -335,6 +335,53 @@ class GuardSchedule
         }
         return $days;
     }
+    // در کلاس GuardSchedule اضافه کن
+    public function getGuardForDate($year, $month, $day)
+    {
+        $query = "SELECT guard_id FROM guard_schedules 
+              WHERE year = :y AND month = :m AND day = :d LIMIT 1";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute([':y' => $year, ':m' => $month, ':d' => $day]);
+        $row = $stmt->fetch();
+        return $row ? $row->guard_id : null;
+    }
+
+    public function getGuardName($guard_id)
+    {
+        $query = "SELECT full_name FROM users WHERE id = :id LIMIT 1";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute([':id' => $guard_id]);
+        $row = $stmt->fetch();
+        return $row ? $row->full_name : 'نامشخص';
+    } // در کلاس GuardSchedule اضافه کن
+    /**
+     * چک می‌کند آیا این نگهبان شیفت امروز را دارد یا نه
+     * @param int $guardId شناسه نگهبان
+     * @param int $year سال شمسی
+     * @param int $month ماه شمسی
+     * @param int $day روز شمسی
+     * @return bool
+     */
+    public function isGuardOnDutyToday($guardId, $year, $month, $day)
+    {
+        $query = "SELECT COUNT(*) AS cnt FROM guard_schedules 
+              WHERE guard_id = :guard_id 
+                AND year = :year 
+                AND month = :month 
+                AND day = :day 
+              LIMIT 1";
+
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute([
+            ':guard_id' => $guardId,
+            ':year'     => $year,
+            ':month'    => $month,
+            ':day'      => $day
+        ]);
+
+        $row = $stmt->fetch();
+        return ($row->cnt ?? 0) > 0;
+    }
 }
 
 class JalaliDate
@@ -600,5 +647,242 @@ class DateTimeConverter
         $jalali = JalaliDate::gregorianToJalali($g_y, $g_m, $g_d);
 
         return $jalali->day . ' ' . JalaliDate::$month_names->{$jalali->month} . ' ' . $jalali->year . ' - ' . $time;
+    }
+}
+
+
+// classes/GuardShiftReport.php
+
+class GuardShiftReport
+{
+    private $pdo;
+
+    public function __construct()
+    {
+        $this->pdo = Database::getConnection();   // ← از کلاس Database استفاده کن (مثل بقیه کلاس‌ها)
+
+        // اگر می‌خوای چک کنی که اتصال موفق بوده یا نه
+        if (!$this->pdo instanceof PDO) {
+            throw new Exception("اتصال به دیتابیس برقرار نشد");
+        }
+    }
+
+    public function create(array $data): int|false
+    {
+        $sql = "
+            INSERT INTO guard_shift_reports (
+                report_date, jalali_year, jalali_month, jalali_day,
+                guard_id, shift_type, handover_time, previous_guard_id,
+                appearance, vehicle_control, property_control, camera_monitoring,
+                fire_safety, building_check, alarm_system, after_hours_entry,
+                forbidden_entry, aquarium_feed, server_room_status, fingerprint, night_rounds,
+                incidents_text, contacts_text, notes_text,
+                handover_signature, received_signature
+            ) VALUES (
+                :report_date, :jalali_year, :jalali_month, :jalali_day,
+                :guard_id, :shift_type, :handover_time, :previous_guard_id,
+                :appearance, :vehicle_control, :property_control, :camera_monitoring,
+                :fire_safety, :building_check, :alarm_system, :after_hours_entry,
+                :forbidden_entry, :aquarium_feed, :server_room_status, :fingerprint, :night_rounds,
+                :incidents_text, :contacts_text, :notes_text,
+                :handover_signature, :received_signature
+            )
+        ";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+
+            $defaults = [
+                'handover_time'       => null,
+                'previous_guard_id'   => null,
+                'incidents_text'      => '',
+                'contacts_text'       => '',
+                'notes_text'          => '',
+                'handover_signature'  => null,
+                'received_signature'  => null,
+            ];
+
+            $data = array_merge($defaults, $data);
+
+            $stmt->execute([
+                ':report_date'        => $data['report_date']           ?? null,
+                ':jalali_year'        => (int)($data['jalali_year']    ?? 0),
+                ':jalali_month'       => (int)($data['jalali_month']   ?? 0),
+                ':jalali_day'         => (int)($data['jalali_day']     ?? 0),
+                ':guard_id'           => (int)($data['guard_id']       ?? 0),
+                ':shift_type'         => $data['shift_type']           ?? '24h',
+                ':handover_time'      => $data['handover_time'],
+                ':previous_guard_id'  => $data['previous_guard_id'],
+                ':appearance'         => (int)($data['appearance'] ?? 1),
+                ':vehicle_control'    => (int)($data['vehicle_control'] ?? 1),
+                ':property_control'   => (int)($data['property_control'] ?? 1),
+                ':camera_monitoring'  => (int)($data['camera_monitoring'] ?? 1),
+                ':fire_safety'        => (int)($data['fire_safety'] ?? 1),
+                ':building_check'     => (int)($data['building_check'] ?? 1),
+                ':alarm_system'       => (int)($data['alarm_system'] ?? 1),
+                ':after_hours_entry'  => (int)($data['after_hours_entry'] ?? 0),
+                ':forbidden_entry'    => (int)($data['forbidden_entry'] ?? 0),
+                ':aquarium_feed'      => (int)($data['aquarium_feed'] ?? 0),
+                ':server_room_status' => (int)($data['server_room_status'] ?? 1),
+                ':fingerprint'        => (int)($data['fingerprint'] ?? 1),
+                ':night_rounds'       => (int)($data['night_rounds'] ?? 1),
+                ':incidents_text'     => $data['incidents_text']       ?? '',
+                ':contacts_text'      => $data['contacts_text']        ?? '',
+                ':notes_text'         => $data['notes_text']           ?? '',
+                ':handover_signature' => $data['handover_signature'],
+                ':received_signature' => $data['received_signature'],
+            ]);
+
+            $insertedId = (int) $this->pdo->lastInsertId();
+
+            if ($insertedId > 0) {
+                return $insertedId;
+            }
+
+            // اگر درج شد ولی id صفر بود (نادر)
+            return false;
+        } catch (PDOException $e) {
+            error_log("GuardShiftReport::create خطا: " . $e->getMessage());
+            // برای دیباگ موقت این دو خط رو نگه دار
+            echo "<pre style='background:#fee; padding:15px; border:1px solid red;'>";
+            echo "خطای PDO در ثبت گزارش:\n";
+            echo htmlspecialchars($e->getMessage()) . "\n";
+            echo "SQLSTATE: " . $e->getCode() . "\n";
+            echo "</pre>";
+            return false;
+        }
+    }
+    /**
+     * گرفتن گزارش یک روز خاص برای یک نگهبان خاص
+     * @param string $date تاریخ میلادی (Y-m-d)
+     * @param int $guardId شناسه نگهبان
+     * @return stdClass|null شیء گزارش یا null اگر وجود نداشت
+     */
+    public function getByDateAndGuard(string $date, int $guardId): ?stdClass
+    {
+        $sql = "
+            SELECT * FROM guard_shift_reports 
+            WHERE report_date = :date 
+              AND guard_id = :guard_id 
+            LIMIT 1
+        ";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([
+                ':date'     => $date,
+                ':guard_id' => $guardId
+            ]);
+
+            $row = $stmt->fetch(PDO::FETCH_OBJ);
+
+            return $row ?: null;
+        } catch (PDOException $e) {
+            error_log("خطا در getByDateAndGuard: " . $e->getMessage());
+            return null;
+        }
+    }
+    /**
+     * به‌روزرسانی گزارش موجود
+     * @param int $reportId شناسه گزارش
+     * @param array $data داده‌های جدید
+     * @return bool موفقیت یا شکست
+     */
+    public function update(int $reportId, array $data): bool
+    {
+        $sql = "
+        UPDATE guard_shift_reports SET
+            shift_type         = :shift_type,
+            handover_time      = :handover_time,
+            previous_guard_id  = :previous_guard_id,
+            appearance         = :appearance,
+            vehicle_control    = :vehicle_control,
+            property_control   = :property_control,
+            camera_monitoring  = :camera_monitoring,
+            fire_safety        = :fire_safety,
+            building_check     = :building_check,
+            alarm_system       = :alarm_system,
+            after_hours_entry  = :after_hours_entry,
+            forbidden_entry    = :forbidden_entry,
+            aquarium_feed      = :aquarium_feed,
+            server_room_status = :server_room_status,
+            fingerprint        = :fingerprint,
+            night_rounds       = :night_rounds,
+            incidents_text     = :incidents_text,
+            contacts_text      = :contacts_text,
+            notes_text         = :notes_text,
+            handover_signature = :handover_signature,
+            received_signature = :received_signature,
+            updated_at         = NOW()
+        WHERE id = :id
+          AND guard_id = :guard_id   -- برای امنیت بیشتر (فقط صاحب گزارش بتونه ویرایش کنه)
+    ";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+
+            $stmt->execute([
+                ':shift_type'         => $data['shift_type']           ?? '24h',
+                ':handover_time'      => $data['handover_time']        ?? null,
+                ':previous_guard_id'  => $data['previous_guard_id']    ?? null,
+                ':appearance'         => (int)($data['appearance']     ?? 1),
+                ':vehicle_control'    => (int)($data['vehicle_control'] ?? 1),
+                ':property_control'   => (int)($data['property_control'] ?? 1),
+                ':camera_monitoring'  => (int)($data['camera_monitoring'] ?? 1),
+                ':fire_safety'        => (int)($data['fire_safety']    ?? 1),
+                ':building_check'     => (int)($data['building_check'] ?? 1),
+                ':alarm_system'       => (int)($data['alarm_system']   ?? 1),
+                ':after_hours_entry'  => (int)($data['after_hours_entry'] ?? 0),
+                ':forbidden_entry'    => (int)($data['forbidden_entry'] ?? 0),
+                ':aquarium_feed'      => (int)($data['aquarium_feed']  ?? 0),
+                ':server_room_status' => (int)($data['server_room_status'] ?? 1),
+                ':fingerprint'        => (int)($data['fingerprint']    ?? 1),
+                ':night_rounds'       => (int)($data['night_rounds']   ?? 1),
+                ':incidents_text'     => $data['incidents_text']       ?? '',
+                ':contacts_text'      => $data['contacts_text']        ?? '',
+                ':notes_text'         => $data['notes_text']           ?? '',
+                ':handover_signature' => $data['handover_signature']   ?? null,
+                ':received_signature' => $data['received_signature']   ?? null,
+                ':id'                 => $reportId,
+                ':guard_id'           => $data['guard_id'],
+            ]);
+
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            error_log("خطا در update گزارش: " . $e->getMessage());
+            return false;
+        }
+    }
+    /**
+     * گرفتن لیست گزارش‌های یک ماه خاص
+     * @param int $year سال شمسی
+     * @param int $month ماه شمسی
+     * @return array لیست گزارش‌ها با اطلاعات نگهبان
+     */
+    public function getMonthReports(int $year, int $month): array
+    {
+        $sql = "
+        SELECT 
+            gsr.*,
+            u.full_name AS guard_name,
+            (gsr.appearance + gsr.vehicle_control + gsr.property_control + gsr.camera_monitoring +
+             gsr.fire_safety + gsr.building_check + gsr.alarm_system + gsr.after_hours_entry +
+             gsr.forbidden_entry + gsr.aquarium_feed + gsr.server_room_status + gsr.fingerprint +
+             gsr.night_rounds) AS checked_count
+        FROM guard_shift_reports gsr
+        LEFT JOIN users u ON gsr.guard_id = u.id
+        WHERE gsr.jalali_year = :year 
+          AND gsr.jalali_month = :month
+        ORDER BY gsr.report_date ASC
+    ";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([':year' => $year, ':month' => $month]);
+            return $stmt->fetchAll(PDO::FETCH_OBJ) ?: [];
+        } catch (PDOException $e) {
+            error_log("خطا در getMonthReports: " . $e->getMessage());
+            return [];
+        }
     }
 }

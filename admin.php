@@ -207,12 +207,114 @@ if (!empty($prevDbScheduleVars) && isset($prevDbSchedule->{$daysInPrevMonth})) {
             <a href="logout.php" class="logout-link">خروج از سیستم</a>
         </div>
         <h1 style="text-align: center;">📅شیفت ها</h1>
+        <!-- بخش جدید: گزارش‌های نگهبان‌ها -->
+
+        <div class="card" style="margin-top: 40px;">
+            <h2 style="text-align:center;">📊 گزارش‌های شیفت نگهبان‌ها</h2>
+
+            <!-- انتخاب ماه و سال -->
+            <form method="GET" style="text-align:center; margin:20px 0;">
+                <label>سال:</label>
+                <select name="report_year">
+                    <?php
+                    $currentYear = $todayJalali->year;
+                    for ($y = $currentYear - 2; $y <= $currentYear + 1; $y++): ?>
+                        <option value="<?php echo $y; ?>" <?php echo ($y == ($GET['report_year'] ?? $currentYear)) ? 'selected' : ''; ?>>
+                            <?php echo $y; ?>
+                        </option>
+                    <?php endfor; ?>
+                </select>
+
+                <label>ماه:</label>
+                <select name="report_month">
+                    <?php for ($m = 1; $m <= 12; $m++): ?>
+                        <option value="<?php echo $m; ?>" <?php echo ($m == ($GET['report_month'] ?? $todayJalali->month)) ? 'selected' : ''; ?>>
+                            <?php echo JalaliDate::$month_names->{$m}; ?>
+                        </option>
+                    <?php endfor; ?>
+                </select>
+
+                <button type="submit" class="btn-primary" style="margin-right:15px;">نمایش گزارش‌ها</button>
+            </form>
+
+            <?php
+            $reportYear  = (int)($_GET['report_year']  ?? $todayJalali->year);
+            $reportMonth = (int)($_GET['report_month'] ?? $todayJalali->month);
+
+            $reportModel = new GuardShiftReport(Database::getConnection());
+            $monthReports = $reportModel->getMonthReports($reportYear, $reportMonth);
+
+            if (empty($monthReports)):
+            ?>
+                <p style="text-align:center; color:#777; padding:30px;">
+                    در این ماه هنوز هیچ گزارشی ثبت نشده است.
+                </p>
+            <?php else: ?>
+                <table style="width:100%; border-collapse:collapse; margin-top:20px;">
+                    <thead>
+                        <tr style="background:#34495e; color:white;">
+                            <th style="padding:12px;">تاریخ شمسی</th>
+                            <th style="padding:12px;">نگهبان</th>
+                            <th style="padding:12px;">شیفت</th>
+                            <th style="padding:12px;">تیک‌ها</th>
+                            <th style="padding:12px;">حوادث/یادداشت</th>
+                            <th style="padding:12px;">تحویل پست</th>
+                            <th style="padding:12px;">عملیات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($monthReports as $rep):
+                            $jalaliDate = JalaliDate::format($rep->jalali_year, $rep->jalali_month, $rep->jalali_day, 'j F');
+                            $checkedPercent = round(($rep->checked_count / 13) * 100); // 13 تا چک‌باکس داریم
+                        ?>
+                            <tr style="border-bottom:1px solid #eee;">
+                                <td style="padding:10px;"><?php echo $jalaliDate; ?></td>
+                                <td style="padding:10px;"><?php echo htmlspecialchars($rep->guard_name ?? 'نامشخص'); ?></td>
+                                <td style="padding:10px;"><?php echo $rep->shift_type === '24h' ? '۲۴ ساعته' : ($rep->shift_type === 'morning' ? 'صبح تا عصر' : 'عصر تا صبح'); ?></td>
+                                <td style="padding:10px; text-align:center;">
+                                    <?php echo $rep->checked_count; ?> / 13
+                                    <span style="color:<?php echo $checkedPercent >= 80 ? '#27ae60' : ($checkedPercent >= 50 ? '#f39c12' : '#e74c3c'); ?>">
+                                        (<?php echo $checkedPercent; ?>%)
+                                    </span>
+                                </td>
+                                <td style="padding:10px; text-align:center;">
+                                    <?php
+                                    $hasNote = !empty($rep->incidents_text) || !empty($rep->contacts_text) || !empty($rep->notes_text);
+                                    echo $hasNote ? '<span style="color:#27ae60;">بله</span>' : '<span style="color:#e74c3c;">خیر</span>';
+                                    ?>
+                                </td>
+                                <td style="padding:10px; text-align:center;">
+                                    <?php
+                                    if ($rep->handover_time && $rep->handover_time !== '00:00:00') {
+                                        echo '<span style="color:#27ae60;">' . htmlspecialchars($rep->handover_time) . '</span>';
+                                    } else {
+                                        echo '<span style="color:#e74c3c; font-weight:bold;">تحویل نداده</span>';
+                                    }
+                                    ?>
+                                </td>
+                                <td style="padding:10px; text-align:center;">
+                                    <a href="#" onclick="alert('جزئیات کامل گزارش در آینده اضافه می‌شود'); return false;" style="color:#3498db; text-decoration:none;">
+                                        مشاهده جزئیات
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+
+                <p style="text-align:center; margin-top:20px; color:#777;">
+                    تعداد کل گزارش‌های این ماه: <?php echo count($monthReports); ?>
+                </p>
+            <?php endif; ?>
+        </div>
 
         <?php if ($autoScheduleMessage): ?>
             <div class="success-message"><?php echo $autoScheduleMessage; ?></div>
         <?php endif; ?>
 
         <div class="schedule-panel">
+
+
             <h3>⚙️ مدیریت شیفت‌بندی</h3>
 
             <form method="post" style="display: inline-block;">
@@ -279,7 +381,7 @@ if (!empty($prevDbScheduleVars) && isset($prevDbSchedule->{$daysInPrevMonth})) {
         <div class="gantt-wrapper">
             <div class="gantt-title">
                 <h2>
-                    <?php echo $monthNames->{$month}; ?> <?php echo $year; ?>
+                    <?php echo $monthNames->$month; ?> <?php echo $year; ?>
                 </h2>
             </div>
 
@@ -707,7 +809,9 @@ if (!empty($prevDbScheduleVars) && isset($prevDbSchedule->{$daysInPrevMonth})) {
         });
     </script>
 
-    <script>
+<!-- اسکرول به تاریخ روز -->
+ 
+    <!-- <script>
         document.addEventListener('DOMContentLoaded', function() {
             const todayRow = document.querySelector('.day-row.today');
 
@@ -739,7 +843,7 @@ if (!empty($prevDbScheduleVars) && isset($prevDbSchedule->{$daysInPrevMonth})) {
                 }, 2000);
             }
         });
-    </script>
+    </script> -->
 
     <script>
         function updateDate() {
