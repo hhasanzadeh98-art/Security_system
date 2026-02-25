@@ -35,7 +35,7 @@ if (isset($_POST['auto_schedule'])) {
     $lastGuardId = null;
     $lastGuardIndex = -1;
 
-    $prevScheduleVars = get_object_vars($prevSchedule);
+    $prevScheduleVars = $prevSchedule ? get_object_vars($prevSchedule) : [];
     if (!empty($prevScheduleVars) && isset($prevSchedule->{$daysInPrevMonth})) {
         $lastGuardId = $prevSchedule->{$daysInPrevMonth};
         foreach ($guards as $index => $guard) {
@@ -219,7 +219,7 @@ if (!empty($prevDbScheduleVars) && isset($prevDbSchedule->{$daysInPrevMonth})) {
                     <?php
                     $currentYear = $todayJalali->year;
                     for ($y = $currentYear - 2; $y <= $currentYear + 1; $y++): ?>
-                        <option value="<?php echo $y; ?>" <?php echo ($y == ($GET['report_year'] ?? $currentYear)) ? 'selected' : ''; ?>>
+                        <option value="<?php echo $y; ?>" <?php echo ($y == ($_GET['report_year'] ?? $currentYear)) ? 'selected' : ''; ?>>
                             <?php echo $y; ?>
                         </option>
                     <?php endfor; ?>
@@ -228,7 +228,7 @@ if (!empty($prevDbScheduleVars) && isset($prevDbSchedule->{$daysInPrevMonth})) {
                 <label>ماه:</label>
                 <select name="report_month">
                     <?php for ($m = 1; $m <= 12; $m++): ?>
-                        <option value="<?php echo $m; ?>" <?php echo ($m == ($GET['report_month'] ?? $todayJalali->month)) ? 'selected' : ''; ?>>
+                        <option value="<?php echo $m; ?>" <?php echo ($m == ($_GET['report_month'] ?? $todayJalali->month)) ? 'selected' : ''; ?>>
                             <?php echo JalaliDate::$month_names->{$m}; ?>
                         </option>
                     <?php endfor; ?>
@@ -253,7 +253,7 @@ if (!empty($prevDbScheduleVars) && isset($prevDbSchedule->{$daysInPrevMonth})) {
                 <table style="width:100%; border-collapse:collapse; margin-top:20px;">
                     <thead>
                         <tr style="background:#34495e; color:white;">
-                            <th style="padding:12px;">تاریخ شمسی</th>
+                            <th style="padding:12px;">تاریخ</th>
                             <th style="padding:12px;">نگهبان</th>
                             <th style="padding:12px;">شیفت</th>
                             <th style="padding:12px;">تیک‌ها</th>
@@ -280,7 +280,7 @@ if (!empty($prevDbScheduleVars) && isset($prevDbSchedule->{$daysInPrevMonth})) {
                                 <td style="padding:10px; text-align:center;">
                                     <?php
                                     $hasNote = !empty($rep->incidents_text) || !empty($rep->contacts_text) || !empty($rep->notes_text);
-                                    echo $hasNote ? '<span style="color:#27ae60;">بله</span>' : '<span style="color:#e74c3c;">خیر</span>';
+                                    echo $hasNote ? '<span style="color:#27ae60;">دارد</span>' : '<span style="color:#e74c3c;">ندارد</span>';
                                     ?>
                                 </td>
                                 <td style="padding:10px; text-align:center;">
@@ -809,8 +809,8 @@ if (!empty($prevDbScheduleVars) && isset($prevDbSchedule->{$daysInPrevMonth})) {
         });
     </script>
 
-<!-- اسکرول به تاریخ روز -->
- 
+    <!-- اسکرول به تاریخ روز -->
+
     <!-- <script>
         document.addEventListener('DOMContentLoaded', function() {
             const todayRow = document.querySelector('.day-row.today');

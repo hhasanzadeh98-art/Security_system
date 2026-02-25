@@ -335,7 +335,7 @@ class GuardSchedule
         }
         return $days;
     }
-    // در کلاس GuardSchedule اضافه کن
+
     public function getGuardForDate($year, $month, $day)
     {
         $query = "SELECT guard_id FROM guard_schedules 
@@ -353,15 +353,8 @@ class GuardSchedule
         $stmt->execute([':id' => $guard_id]);
         $row = $stmt->fetch();
         return $row ? $row->full_name : 'نامشخص';
-    } // در کلاس GuardSchedule اضافه کن
-    /**
-     * چک می‌کند آیا این نگهبان شیفت امروز را دارد یا نه
-     * @param int $guardId شناسه نگهبان
-     * @param int $year سال شمسی
-     * @param int $month ماه شمسی
-     * @param int $day روز شمسی
-     * @return bool
-     */
+    }
+
     public function isGuardOnDutyToday($guardId, $year, $month, $day)
     {
         $query = "SELECT COUNT(*) AS cnt FROM guard_schedules 
@@ -650,8 +643,48 @@ class DateTimeConverter
     }
 }
 
+class Personnel
+{
+    private $conn;
 
-// classes/GuardShiftReport.php
+    public function __construct()
+    {
+        $this->conn = Database::getConnection();
+    }
+
+    public function getAllPersonnel()
+    {
+        $query = "SELECT * FROM personnel WHERE is_active = 1 ORDER BY full_name ASC";
+        $stmt = $this->conn->query($query);
+        return $stmt->fetchAll(PDO::FETCH_OBJ);
+    }
+
+    public function getById($id)
+    {
+        $query = "SELECT * FROM personnel WHERE id = :id LIMIT 1";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute([':id' => $id]);
+        return $stmt->fetch(PDO::FETCH_OBJ);
+    }
+
+
+
+    public function getNamesByIds($ids)
+    {
+        if (empty($ids)) return [];
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $query = "SELECT id, full_name FROM personnel WHERE id IN ($placeholders)";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute($ids);
+
+        $result = [];
+        while ($row = $stmt->fetch(PDO::FETCH_OBJ)) {
+            $result[$row->id] = $row->full_name;
+        }
+        return $result;
+    }
+}
 
 class GuardShiftReport
 {
@@ -659,192 +692,400 @@ class GuardShiftReport
 
     public function __construct()
     {
-        $this->pdo = Database::getConnection();   // ← از کلاس Database استفاده کن (مثل بقیه کلاس‌ها)
-
-        // اگر می‌خوای چک کنی که اتصال موفق بوده یا نه
+        $this->pdo = Database::getConnection();
         if (!$this->pdo instanceof PDO) {
             throw new Exception("اتصال به دیتابیس برقرار نشد");
         }
     }
 
+    public function getAllByGuard($guard_id)
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT * FROM guard_shift_reports 
+            WHERE guard_id = :guard_id 
+            ORDER BY report_date DESC
+        ");
+        $stmt->execute([':guard_id' => $guard_id]);
+        return $stmt->fetchAll(PDO::FETCH_OBJ);
+    }
+
     public function create(array $data): int|false
     {
-        $sql = "
-            INSERT INTO guard_shift_reports (
-                report_date, jalali_year, jalali_month, jalali_day,
-                guard_id, shift_type, handover_time, previous_guard_id,
-                appearance, vehicle_control, property_control, camera_monitoring,
-                fire_safety, building_check, alarm_system, after_hours_entry,
-                forbidden_entry, aquarium_feed, server_room_status, fingerprint, night_rounds,
-                incidents_text, contacts_text, notes_text,
-                handover_signature, received_signature
-            ) VALUES (
-                :report_date, :jalali_year, :jalali_month, :jalali_day,
-                :guard_id, :shift_type, :handover_time, :previous_guard_id,
-                :appearance, :vehicle_control, :property_control, :camera_monitoring,
-                :fire_safety, :building_check, :alarm_system, :after_hours_entry,
-                :forbidden_entry, :aquarium_feed, :server_room_status, :fingerprint, :night_rounds,
-                :incidents_text, :contacts_text, :notes_text,
-                :handover_signature, :received_signature
-            )
-        ";
+        // اول اسم نگهبان رو پیدا می‌کنیم
+        $guardName = '';
+        if (isset($data['guard_id'])) {
+            $userModel = new User();
+            $guard = $userModel->getById($data['guard_id']);
+            $guardName = $guard ? $guard->getName() : '';
+        }
 
-        try {
-            $stmt = $this->pdo->prepare($sql);
+        // اسم نگهبان قبلی رو پیدا می‌کنیم
+        $previousGuardName = '';
+        if (!empty($data['previous_guard_id'])) {
+            $userModel = new User();
+            $prevGuard = $userModel->getById($data['previous_guard_id']);
+            $previousGuardName = $prevGuard ? $prevGuard->getName() : '';
+        }
 
-            $defaults = [
-                'handover_time'       => null,
-                'previous_guard_id'   => null,
-                'incidents_text'      => '',
-                'contacts_text'       => '',
-                'notes_text'          => '',
-                'handover_signature'  => null,
-                'received_signature'  => null,
-            ];
+        // پردازش داده‌های ورود افراد - مهم: داده از people_entries_data میاد
+        $peopleEntryType = null;
+        $peopleEntryNames = null;
+        $peopleEntryTime = null;
+        $peopleEntryCount = 0;
 
-            $data = array_merge($defaults, $data);
+        if (!empty($data['people_entries_data'])) {
+            $entries = is_string($data['people_entries_data']) ? json_decode($data['people_entries_data'], true) : $data['people_entries_data'];
+            if (is_array($entries) && count($entries) > 0) {
+                $peopleEntryCount = count($entries);
+                // برای سادگی، اولین ورودی رو ذخیره می‌کنیم
+                $firstEntry = $entries[0];
+                $peopleEntryType = $firstEntry['type'] ?? null;
+                $peopleEntryTime = $firstEntry['time'] ?? null;
 
-            $stmt->execute([
-                ':report_date'        => $data['report_date']           ?? null,
-                ':jalali_year'        => (int)($data['jalali_year']    ?? 0),
-                ':jalali_month'       => (int)($data['jalali_month']   ?? 0),
-                ':jalali_day'         => (int)($data['jalali_day']     ?? 0),
-                ':guard_id'           => (int)($data['guard_id']       ?? 0),
-                ':shift_type'         => $data['shift_type']           ?? '24h',
-                ':handover_time'      => $data['handover_time'],
-                ':previous_guard_id'  => $data['previous_guard_id'],
-                ':appearance'         => (int)($data['appearance'] ?? 1),
-                ':vehicle_control'    => (int)($data['vehicle_control'] ?? 1),
-                ':property_control'   => (int)($data['property_control'] ?? 1),
-                ':camera_monitoring'  => (int)($data['camera_monitoring'] ?? 1),
-                ':fire_safety'        => (int)($data['fire_safety'] ?? 1),
-                ':building_check'     => (int)($data['building_check'] ?? 1),
-                ':alarm_system'       => (int)($data['alarm_system'] ?? 1),
-                ':after_hours_entry'  => (int)($data['after_hours_entry'] ?? 0),
-                ':forbidden_entry'    => (int)($data['forbidden_entry'] ?? 0),
-                ':aquarium_feed'      => (int)($data['aquarium_feed'] ?? 0),
-                ':server_room_status' => (int)($data['server_room_status'] ?? 1),
-                ':fingerprint'        => (int)($data['fingerprint'] ?? 1),
-                ':night_rounds'       => (int)($data['night_rounds'] ?? 1),
-                ':incidents_text'     => $data['incidents_text']       ?? '',
-                ':contacts_text'      => $data['contacts_text']        ?? '',
-                ':notes_text'         => $data['notes_text']           ?? '',
-                ':handover_signature' => $data['handover_signature'],
-                ':received_signature' => $data['received_signature'],
-            ]);
-
-            $insertedId = (int) $this->pdo->lastInsertId();
-
-            if ($insertedId > 0) {
-                return $insertedId;
+                if ($peopleEntryType === 'personnel' && !empty($firstEntry['personnel'])) {
+                    $names = array_column($firstEntry['personnel'], 'name');
+                    $peopleEntryNames = implode('، ', $names);
+                } elseif ($peopleEntryType === 'guest' && !empty($firstEntry['guest'])) {
+                    $peopleEntryNames = $firstEntry['guest']['name'] ?? '';
+                } elseif ($peopleEntryType === 'other' && !empty($firstEntry['other'])) {
+                    $peopleEntryNames = $firstEntry['other'];
+                }
             }
+        } elseif (!empty($data['people_entries'])) {
+            // برای سازگاری با کد قبلی
+            $entry = $data['people_entries'][0] ?? null;
+            if ($entry) {
+                $peopleEntryType = $entry['type'] ?? null;
+                $peopleEntryTime = $entry['timestamp'] ?? $entry['time'] ?? null;
 
-            // اگر درج شد ولی id صفر بود (نادر)
-            return false;
-        } catch (PDOException $e) {
-            error_log("GuardShiftReport::create خطا: " . $e->getMessage());
-            // برای دیباگ موقت این دو خط رو نگه دار
-            echo "<pre style='background:#fee; padding:15px; border:1px solid red;'>";
-            echo "خطای PDO در ثبت گزارش:\n";
-            echo htmlspecialchars($e->getMessage()) . "\n";
-            echo "SQLSTATE: " . $e->getCode() . "\n";
-            echo "</pre>";
-            return false;
+                if ($peopleEntryType === 'personnel' && !empty($entry['personnel_ids'])) {
+                    $names = [];
+                    $userModel = new User();
+                    foreach ($entry['personnel_ids'] as $id) {
+                        $user = $userModel->getById($id);
+                        if ($user) {
+                            $names[] = $user->getName();
+                        }
+                    }
+                    $peopleEntryNames = implode('، ', $names);
+                } elseif ($peopleEntryType === 'guest' && !empty($entry['name'])) {
+                    $peopleEntryNames = $entry['name'];
+                }
+            }
         }
-    }
-    /**
-     * گرفتن گزارش یک روز خاص برای یک نگهبان خاص
-     * @param string $date تاریخ میلادی (Y-m-d)
-     * @param int $guardId شناسه نگهبان
-     * @return stdClass|null شیء گزارش یا null اگر وجود نداشت
-     */
-    public function getByDateAndGuard(string $date, int $guardId): ?stdClass
-    {
-        $sql = "
-            SELECT * FROM guard_shift_reports 
-            WHERE report_date = :date 
-              AND guard_id = :guard_id 
-            LIMIT 1
-        ";
 
-        try {
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([
-                ':date'     => $date,
-                ':guard_id' => $guardId
-            ]);
+        // استخراج داده‌های خودرو
+        $vehiclePlateType = null;
+        $vehicleCarType = null;
+        $vehicleNote = null;
+        $vehicleEntryTime = null;
 
-            $row = $stmt->fetch(PDO::FETCH_OBJ);
-
-            return $row ?: null;
-        } catch (PDOException $e) {
-            error_log("خطا در getByDateAndGuard: " . $e->getMessage());
-            return null;
+        if (!empty($data['vehicle_entries'])) {
+            $vehicle = $data['vehicle_entries'][0] ?? null;
+            if ($vehicle) {
+                $vehiclePlateType = $vehicle['plate_type'] ?? null;
+                $vehicleCarType = $vehicle['car_type'] ?? null;
+                $vehicleNote = $vehicle['note'] ?? null;
+                $vehicleEntryTime = $vehicle['timestamp'] ?? $vehicle['time'] ?? null;
+            }
+        } elseif (!empty($_POST['vehicle_plate_type'])) {
+            // اگر از فرم مستقیم اومده
+            $vehiclePlateType = $_POST['vehicle_plate_type'] ?? null;
+            $vehicleCarType = $_POST['vehicle_car_type'] ?? null;
+            $vehicleNote = $_POST['vehicle_note'] ?? null;
+            $vehicleEntryTime = $_POST['vehicle_entry_time'] ?? null;
         }
-    }
-    /**
-     * به‌روزرسانی گزارش موجود
-     * @param int $reportId شناسه گزارش
-     * @param array $data داده‌های جدید
-     * @return bool موفقیت یا شکست
-     */
-    public function update(int $reportId, array $data): bool
-    {
+
+        // استخراج داده‌های اموال
+        $propertyType = null;
+        $propertyHasNumber = 0;
+        $propertyNumber = null;
+        $propertyEntryTime = null;
+
+        if (!empty($data['property_entries'])) {
+            $property = $data['property_entries'][0] ?? null;
+            if ($property) {
+                $propertyType = $property['type'] ?? null;
+                $propertyHasNumber = isset($property['has_number']) && $property['has_number'] ? 1 : 0;
+                $propertyNumber = $property['number'] ?? null;
+                $propertyEntryTime = $property['timestamp'] ?? $property['time'] ?? null;
+            }
+        } elseif (!empty($_POST['property_type'])) {
+            $propertyType = $_POST['property_type'] ?? null;
+            $propertyHasNumber = isset($_POST['property_has_number']) ? 1 : 0;
+            $propertyNumber = $_POST['property_number'] ?? null;
+            $propertyEntryTime = $_POST['property_entry_time'] ?? null;
+        }
+
+        // استخراج وضعیت روشنایی
+        $lightingChecked = isset($data['lighting_checked']) ? (int)$data['lighting_checked'] : 0;
+        $lightingComputer = isset($data['lighting_computer']) ? (int)$data['lighting_computer'] : 0;
+        $lightingLamp = isset($data['lighting_lamp']) ? (int)$data['lighting_lamp'] : 0;
+        $lightingSocket = isset($data['lighting_socket']) ? (int)$data['lighting_socket'] : 0;
+        $lightingOther = $data['lighting_other'] ?? null;
+
+        // استخراج وضعیت حفاظتی
+        $protectiveChecked = isset($data['protective_checked']) ? (int)$data['protective_checked'] : 0;
+        $protectiveShutter = isset($data['protective_shutter']) ? (int)$data['protective_shutter'] : 0;
+        $protectiveAlarm = isset($data['protective_alarm']) ? (int)$data['protective_alarm'] : 0;
+        $protectiveLock = isset($data['protective_lock']) ? (int)$data['protective_lock'] : 0;
+        $protectiveOther = $data['protective_other'] ?? null;
+
+        // استخراج وضعیت سرمایشی/گرمایشی
+        $coolingHeatingChecked = isset($data['cooling_heating_checked']) ? (int)$data['cooling_heating_checked'] : 0;
+        $coolingKooler = isset($data['cooling_kooler']) ? (int)$data['cooling_kooler'] : 0;
+        $heatingHeater = isset($data['heating_heater']) ? (int)$data['heating_heater'] : 0;
+        $coolingHeatingOther = $data['cooling_heating_other'] ?? null;
+
+        // استخراج بررسی بخاری و گاز
+        $heaterGasChecked = isset($data['heater_gas_checked']) ? (int)$data['heater_gas_checked'] : 0;
+        $heaterOff = isset($data['heater_off']) ? (int)$data['heater_off'] : 0;
+        $gasLeakCheck = isset($data['gas_leak_check']) ? (int)$data['gas_leak_check'] : 0;
+        $gasValveClosed = isset($data['gas_valve_closed']) ? (int)$data['gas_valve_closed'] : 0;
+        $heaterGasNote = $data['heater_gas_note'] ?? null;
+
+        // استخراج وضعیت دوربین
+        $cameraStatus = $data['camera_status'] ?? null;
+        $cameraDetails = $data['camera_details'] ?? null;
+
+        // استخراج گزارش‌های مهم
+        $importantIncident = isset($data['important_incident']) ? (int)$data['important_incident'] : 0;
+        $importantFailure = isset($data['important_failure']) ? (int)$data['important_failure'] : 0;
+        $importantSuspicious = isset($data['important_suspicious']) ? (int)$data['important_suspicious'] : 0;
+        $importantFollowup = isset($data['important_followup']) ? (int)$data['important_followup'] : 0;
+        $importantOther = $data['important_other'] ?? null;
+
         $sql = "
-        UPDATE guard_shift_reports SET
-            shift_type         = :shift_type,
-            handover_time      = :handover_time,
-            previous_guard_id  = :previous_guard_id,
-            appearance         = :appearance,
-            vehicle_control    = :vehicle_control,
-            property_control   = :property_control,
-            camera_monitoring  = :camera_monitoring,
-            fire_safety        = :fire_safety,
-            building_check     = :building_check,
-            alarm_system       = :alarm_system,
-            after_hours_entry  = :after_hours_entry,
-            forbidden_entry    = :forbidden_entry,
-            aquarium_feed      = :aquarium_feed,
-            server_room_status = :server_room_status,
-            fingerprint        = :fingerprint,
-            night_rounds       = :night_rounds,
-            incidents_text     = :incidents_text,
-            contacts_text      = :contacts_text,
-            notes_text         = :notes_text,
-            handover_signature = :handover_signature,
-            received_signature = :received_signature,
-            updated_at         = NOW()
-        WHERE id = :id
-          AND guard_id = :guard_id   -- برای امنیت بیشتر (فقط صاحب گزارش بتونه ویرایش کنه)
+        INSERT INTO guard_shift_reports (
+            report_date, jalali_year, jalali_month, jalali_day,
+            guard_id, guard_name, shift_type, handover_time, previous_guard_id, previous_guard_name,
+            appearance, vehicle_control, property_control, camera_monitoring,
+            fire_safety, building_check, alarm_system, after_hours_entry,
+            forbidden_entry, aquarium_feed, server_room_status, fingerprint, night_rounds,
+            
+            people_entry_count, people_entry_type, people_entry_names, people_entry_time,
+            vehicle_plate_type, vehicle_car_type, vehicle_note, vehicle_entry_time,
+            property_type, property_has_number, property_number, property_entry_time,
+            
+            lighting_checked, lighting_computer, lighting_lamp, lighting_socket, lighting_other,
+            protective_checked, protective_shutter, protective_alarm, protective_lock, protective_other,
+            cooling_heating_checked, cooling_kooler, heating_heater, cooling_heating_other,
+            heater_gas_checked, heater_off, gas_leak_check, gas_valve_closed, heater_gas_note,
+            camera_status, camera_details,
+            
+            night_round1_time, night_round2_time, night_rounds_note,
+            server_temp_status, ups_status, fire_alarm_status, server_room_note,
+            tasks_performed,
+            
+            important_incident, important_failure, important_suspicious, important_followup, important_other,
+            incidents_text, contacts_text, notes_text,
+            handover_signature, received_signature
+        ) VALUES (
+            :report_date, :jalali_year, :jalali_month, :jalali_day,
+            :guard_id, :guard_name, :shift_type, :handover_time, :previous_guard_id, :previous_guard_name,
+            :appearance, :vehicle_control, :property_control, :camera_monitoring,
+            :fire_safety, :building_check, :alarm_system, :after_hours_entry,
+            :forbidden_entry, :aquarium_feed, :server_room_status, :fingerprint, :night_rounds,
+            
+            :people_entry_count, :people_entry_type, :people_entry_names, :people_entry_time,
+            :vehicle_plate_type, :vehicle_car_type, :vehicle_note, :vehicle_entry_time,
+            :property_type, :property_has_number, :property_number, :property_entry_time,
+            
+            :lighting_checked, :lighting_computer, :lighting_lamp, :lighting_socket, :lighting_other,
+            :protective_checked, :protective_shutter, :protective_alarm, :protective_lock, :protective_other,
+            :cooling_heating_checked, :cooling_kooler, :heating_heater, :cooling_heating_other,
+            :heater_gas_checked, :heater_off, :gas_leak_check, :gas_valve_closed, :heater_gas_note,
+            :camera_status, :camera_details,
+            
+            :night_round1_time, :night_round2_time, :night_rounds_note,
+            :server_temp_status, :ups_status, :fire_alarm_status, :server_room_note,
+            :tasks_performed,
+            
+            :important_incident, :important_failure, :important_suspicious, :important_followup, :important_other,
+            :incidents_text, :contacts_text, :notes_text,
+            :handover_signature, :received_signature
+        )
     ";
 
         try {
             $stmt = $this->pdo->prepare($sql);
 
             $stmt->execute([
-                ':shift_type'         => $data['shift_type']           ?? '24h',
-                ':handover_time'      => $data['handover_time']        ?? null,
-                ':previous_guard_id'  => $data['previous_guard_id']    ?? null,
-                ':appearance'         => (int)($data['appearance']     ?? 1),
-                ':vehicle_control'    => (int)($data['vehicle_control'] ?? 1),
-                ':property_control'   => (int)($data['property_control'] ?? 1),
-                ':camera_monitoring'  => (int)($data['camera_monitoring'] ?? 1),
-                ':fire_safety'        => (int)($data['fire_safety']    ?? 1),
-                ':building_check'     => (int)($data['building_check'] ?? 1),
-                ':alarm_system'       => (int)($data['alarm_system']   ?? 1),
-                ':after_hours_entry'  => (int)($data['after_hours_entry'] ?? 0),
-                ':forbidden_entry'    => (int)($data['forbidden_entry'] ?? 0),
-                ':aquarium_feed'      => (int)($data['aquarium_feed']  ?? 0),
+                ':report_date' => $data['report_date'] ?? null,
+                ':jalali_year' => (int)($data['jalali_year'] ?? 0),
+                ':jalali_month' => (int)($data['jalali_month'] ?? 0),
+                ':jalali_day' => (int)($data['jalali_day'] ?? 0),
+                ':guard_id' => (int)($data['guard_id'] ?? 0),
+                ':guard_name' => $guardName,
+                ':shift_type' => $data['shift_type'] ?? '24h',
+                ':handover_time' => $data['handover_time'] ?? null,
+                ':previous_guard_id' => $data['previous_guard_id'] ?? null,
+                ':previous_guard_name' => $previousGuardName,
+
+                ':appearance' => (int)($data['appearance'] ?? 1),
+                ':vehicle_control' => (int)($data['vehicle_control'] ?? 1),
+                ':property_control' => (int)($data['property_control'] ?? 1),
+                ':camera_monitoring' => (int)($data['camera_monitoring'] ?? 1),
+                ':fire_safety' => (int)($data['fire_safety'] ?? 1),
+                ':building_check' => (int)($data['building_check'] ?? 1),
+                ':alarm_system' => (int)($data['alarm_system'] ?? 1),
+                ':after_hours_entry' => (int)($data['after_hours_entry'] ?? 0),
+                ':forbidden_entry' => (int)($data['forbidden_entry'] ?? 0),
+                ':aquarium_feed' => (int)($data['aquarium_feed'] ?? 0),
                 ':server_room_status' => (int)($data['server_room_status'] ?? 1),
-                ':fingerprint'        => (int)($data['fingerprint']    ?? 1),
-                ':night_rounds'       => (int)($data['night_rounds']   ?? 1),
-                ':incidents_text'     => $data['incidents_text']       ?? '',
-                ':contacts_text'      => $data['contacts_text']        ?? '',
-                ':notes_text'         => $data['notes_text']           ?? '',
-                ':handover_signature' => $data['handover_signature']   ?? null,
-                ':received_signature' => $data['received_signature']   ?? null,
-                ':id'                 => $reportId,
-                ':guard_id'           => $data['guard_id'],
+                ':fingerprint' => (int)($data['fingerprint'] ?? 1),
+                ':night_rounds' => (int)($data['night_rounds'] ?? 1),
+
+                ':people_entry_count' => $peopleEntryCount,
+                ':people_entry_type' => $peopleEntryType,
+                ':people_entry_names' => $peopleEntryNames,
+                ':people_entry_time' => $peopleEntryTime,
+
+                ':vehicle_plate_type' => $vehiclePlateType,
+                ':vehicle_car_type' => $vehicleCarType,
+                ':vehicle_note' => $vehicleNote,
+                ':vehicle_entry_time' => $vehicleEntryTime,
+
+                ':property_type' => $propertyType,
+                ':property_has_number' => $propertyHasNumber,
+                ':property_number' => $propertyNumber,
+                ':property_entry_time' => $propertyEntryTime,
+
+                ':lighting_checked' => $lightingChecked,
+                ':lighting_computer' => $lightingComputer,
+                ':lighting_lamp' => $lightingLamp,
+                ':lighting_socket' => $lightingSocket,
+                ':lighting_other' => $lightingOther,
+
+                ':protective_checked' => $protectiveChecked,
+                ':protective_shutter' => $protectiveShutter,
+                ':protective_alarm' => $protectiveAlarm,
+                ':protective_lock' => $protectiveLock,
+                ':protective_other' => $protectiveOther,
+
+                ':cooling_heating_checked' => $coolingHeatingChecked,
+                ':cooling_kooler' => $coolingKooler,
+                ':heating_heater' => $heatingHeater,
+                ':cooling_heating_other' => $coolingHeatingOther,
+
+                ':heater_gas_checked' => $heaterGasChecked,
+                ':heater_off' => $heaterOff,
+                ':gas_leak_check' => $gasLeakCheck,
+                ':gas_valve_closed' => $gasValveClosed,
+                ':heater_gas_note' => $heaterGasNote,
+
+                ':camera_status' => $cameraStatus,
+                ':camera_details' => $cameraDetails,
+
+                ':night_round1_time' => $data['night_round1_time'] ?? null,
+                ':night_round2_time' => $data['night_round2_time'] ?? null,
+                ':night_rounds_note' => $data['night_rounds_note'] ?? '',
+
+                ':server_temp_status' => $data['server_temp_status'] ?? 'normal',
+                ':ups_status' => $data['ups_status'] ?? 'healthy',
+                ':fire_alarm_status' => $data['fire_alarm_status'] ?? 'active',
+                ':server_room_note' => $data['server_room_note'] ?? '',
+
+                ':tasks_performed' => $data['tasks_performed'] ?? '',
+
+                ':important_incident' => $importantIncident,
+                ':important_failure' => $importantFailure,
+                ':important_suspicious' => $importantSuspicious,
+                ':important_followup' => $importantFollowup,
+                ':important_other' => $importantOther,
+
+                ':incidents_text' => $data['incidents_text'] ?? '',
+                ':contacts_text' => $data['contacts_text'] ?? '',
+                ':notes_text' => $data['notes_text'] ?? '',
+
+                ':handover_signature' => $data['handover_signature'] ?? null,
+                ':received_signature' => $data['received_signature'] ?? null,
+            ]);
+
+            return (int) $this->pdo->lastInsertId() ?: false;
+        } catch (PDOException $e) {
+            error_log("GuardShiftReport::create خطا: " . $e->getMessage());
+            // اضافه کردن این خط برای نمایش خطا
+            echo "<pre style='background:#fee; color:#c00; padding:10px; margin:10px; border:2px solid red;'>";
+            echo "خطای دیتابیس: " . $e->getMessage() . "\n";
+            echo "کد خطا: " . $e->getCode() . "\n";
+            echo "</pre>";
+            return false;
+        }
+    }
+
+    public function update(int $reportId, array $data): bool
+    {
+        $sql = "
+            UPDATE guard_shift_reports SET
+                shift_type = :shift_type,
+                handover_time = :handover_time,
+                previous_guard_id = :previous_guard_id,
+                appearance = :appearance,
+                vehicle_control = :vehicle_control,
+                property_control = :property_control,
+                camera_monitoring = :camera_monitoring,
+                fire_safety = :fire_safety,
+                building_check = :building_check,
+                alarm_system = :alarm_system,
+                after_hours_entry = :after_hours_entry,
+                forbidden_entry = :forbidden_entry,
+                aquarium_feed = :aquarium_feed,
+                server_room_status = :server_room_status,
+                fingerprint = :fingerprint,
+                night_rounds = :night_rounds,
+                night_round1_time = :night_round1_time,
+                night_round2_time = :night_round2_time,
+                night_rounds_note = :night_rounds_note,
+                server_temp_status = :server_temp_status,
+                ups_status = :ups_status,
+                fire_alarm_status = :fire_alarm_status,
+                server_room_note = :server_room_note,
+                tasks_performed = :tasks_performed,
+                incidents_text = :incidents_text,
+                contacts_text = :contacts_text,
+                notes_text = :notes_text,
+                handover_signature = :handover_signature,
+                received_signature = :received_signature,
+                updated_at = NOW()
+            WHERE id = :id AND guard_id = :guard_id
+        ";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+
+            $stmt->execute([
+                ':shift_type' => $data['shift_type'] ?? '24h',
+                ':handover_time' => $data['handover_time'] ?? null,
+                ':previous_guard_id' => $data['previous_guard_id'] ?? null,
+                ':appearance' => (int)($data['appearance'] ?? 1),
+                ':vehicle_control' => (int)($data['vehicle_control'] ?? 1),
+                ':property_control' => (int)($data['property_control'] ?? 1),
+                ':camera_monitoring' => (int)($data['camera_monitoring'] ?? 1),
+                ':fire_safety' => (int)($data['fire_safety'] ?? 1),
+                ':building_check' => (int)($data['building_check'] ?? 1),
+                ':alarm_system' => (int)($data['alarm_system'] ?? 1),
+                ':after_hours_entry' => (int)($data['after_hours_entry'] ?? 0),
+                ':forbidden_entry' => (int)($data['forbidden_entry'] ?? 0),
+                ':aquarium_feed' => (int)($data['aquarium_feed'] ?? 0),
+                ':server_room_status' => (int)($data['server_room_status'] ?? 1),
+                ':fingerprint' => (int)($data['fingerprint'] ?? 1),
+                ':night_rounds' => (int)($data['night_rounds'] ?? 1),
+                ':night_round1_time' => $data['night_round1_time'] ?? null,
+                ':night_round2_time' => $data['night_round2_time'] ?? null,
+                ':night_rounds_note' => $data['night_rounds_note'] ?? '',
+                ':server_temp_status' => $data['server_temp_status'] ?? 'normal',
+                ':ups_status' => $data['ups_status'] ?? 'healthy',
+                ':fire_alarm_status' => $data['fire_alarm_status'] ?? 'active',
+                ':server_room_note' => $data['server_room_note'] ?? '',
+                ':tasks_performed' => $data['tasks_performed'] ?? '',
+                ':incidents_text' => $data['incidents_text'] ?? '',
+                ':contacts_text' => $data['contacts_text'] ?? '',
+                ':notes_text' => $data['notes_text'] ?? '',
+                ':handover_signature' => $data['handover_signature'] ?? null,
+                ':received_signature' => $data['received_signature'] ?? null,
+                ':id' => $reportId,
+                ':guard_id' => (int)($data['guard_id'] ?? 0),
             ]);
 
             return $stmt->rowCount() > 0;
@@ -853,28 +1094,40 @@ class GuardShiftReport
             return false;
         }
     }
-    /**
-     * گرفتن لیست گزارش‌های یک ماه خاص
-     * @param int $year سال شمسی
-     * @param int $month ماه شمسی
-     * @return array لیست گزارش‌ها با اطلاعات نگهبان
-     */
+
+    public function getByDateAndGuard(string $date, int $guardId): ?stdClass
+    {
+        $sql = "
+            SELECT * FROM guard_shift_reports 
+            WHERE report_date = :date AND guard_id = :guard_id 
+            LIMIT 1
+        ";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([':date' => $date, ':guard_id' => $guardId]);
+            return $stmt->fetch(PDO::FETCH_OBJ) ?: null;
+        } catch (PDOException $e) {
+            error_log("خطا در getByDateAndGuard: " . $e->getMessage());
+            return null;
+        }
+    }
+
     public function getMonthReports(int $year, int $month): array
     {
         $sql = "
-        SELECT 
-            gsr.*,
-            u.full_name AS guard_name,
-            (gsr.appearance + gsr.vehicle_control + gsr.property_control + gsr.camera_monitoring +
-             gsr.fire_safety + gsr.building_check + gsr.alarm_system + gsr.after_hours_entry +
-             gsr.forbidden_entry + gsr.aquarium_feed + gsr.server_room_status + gsr.fingerprint +
-             gsr.night_rounds) AS checked_count
-        FROM guard_shift_reports gsr
-        LEFT JOIN users u ON gsr.guard_id = u.id
-        WHERE gsr.jalali_year = :year 
-          AND gsr.jalali_month = :month
-        ORDER BY gsr.report_date ASC
-    ";
+            SELECT 
+                gsr.*,
+                u.full_name AS guard_name,
+                (gsr.appearance + gsr.vehicle_control + gsr.property_control + gsr.camera_monitoring +
+                 gsr.fire_safety + gsr.building_check + gsr.alarm_system + gsr.after_hours_entry +
+                 gsr.forbidden_entry + gsr.aquarium_feed + gsr.server_room_status + gsr.fingerprint +
+                 gsr.night_rounds) AS checked_count
+            FROM guard_shift_reports gsr
+            LEFT JOIN users u ON gsr.guard_id = u.id
+            WHERE gsr.jalali_year = :year AND gsr.jalali_month = :month
+            ORDER BY gsr.report_date ASC
+        ";
 
         try {
             $stmt = $this->pdo->prepare($sql);
@@ -884,5 +1137,29 @@ class GuardShiftReport
             error_log("خطا در getMonthReports: " . $e->getMessage());
             return [];
         }
+    }
+
+    public function delete(int $reportId, int $guardId): bool
+    {
+        $sql = "DELETE FROM guard_shift_reports WHERE id = :id AND guard_id = :guard_id";
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([':id' => $reportId, ':guard_id' => $guardId]);
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            error_log("خطا در delete گزارش: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    private function encodeJson($data): string
+    {
+        if (is_string($data)) {
+            $decoded = json_decode($data, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                return $data;
+            }
+        }
+        return json_encode($data, JSON_UNESCAPED_UNICODE);
     }
 }
